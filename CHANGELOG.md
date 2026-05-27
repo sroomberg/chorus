@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.1 — 2026-05-27
+
+- Fix: plugin failed to load — OpenCode calls every module export as a factory function, so named class re-exports (`AccessManager`, `RelayServer`, etc.) caused a "class constructor called without new" crash on startup
+- Fix: chorus tools were not registered — the plugin was using the wrong API (`"tool.register"` hook with JSON Schema args); rewritten to use `hooks.tool` with Zod schemas per the real `@opencode-ai/plugin` v1.15.11 spec
+- Fix: joining user appeared twice in the connected user list — relay sent `user.list` (already containing the joiner) then broadcast `user.joined` to all clients including the joiner
+
 ## v0.1.0 — 2026-05-27
 
 Initial release.
