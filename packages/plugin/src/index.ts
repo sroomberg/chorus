@@ -10,11 +10,6 @@ import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-export { AccessManager } from "./access/index.js";
-export { RelayServer } from "./relay/index.js";
-export { JoinClient } from "./join/index.js";
-export type { BackupAdapter } from "./backup/index.js";
-export { S3BackupAdapter } from "./backup/index.js";
 
 const DEFAULT_PORT = parseInt(process.env["CHORUS_PORT"] ?? "7742", 10);
 
