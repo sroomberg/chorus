@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags: ["v*"]
 
 jobs:
   ci:
@@ -18,25 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get plugin version
-        id: version
-        run: echo "version=v$(jq -r .version packages/plugin/package.json)" >> "$GITHUB_OUTPUT"
-
-      - name: Check if release already exists
-        id: check
-        run: |
-          if gh release view "${{ steps.version.outputs.version }}" &>/dev/null; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-
       - name: Extract release notes and publish
-        if: steps.check.outputs.exists == 'false'
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ github.ref_name }}"
           awk "p && /^## v/{exit} /^## ${VERSION}/{p=1}" CHANGELOG.md > /tmp/release-notes.md
           gh release create "$VERSION" \
             --title "$VERSION" \
