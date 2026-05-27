@@ -12,6 +12,16 @@ interface Props {
   isHost: boolean;
 }
 
+function roleBadgeStyle(role: string): React.CSSProperties {
+  return {
+    fontSize: 10,
+    padding: "1px 5px",
+    borderRadius: 3,
+    background: role === "host" ? "#4a3a00" : role === "collaborator" ? "#003a4a" : "#2a2a2a",
+    color: role === "host" ? "#ffd" : role === "collaborator" ? "#aef" : "#888",
+  };
+}
+
 const styles: Record<string, React.CSSProperties> = {
   sidebar: {
     width: 280,
@@ -44,13 +54,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     gap: 6,
   },
-  roleBadge: (role: string): React.CSSProperties => ({
-    fontSize: 10,
-    padding: "1px 5px",
-    borderRadius: 3,
-    background: role === "host" ? "#4a3a00" : role === "collaborator" ? "#003a4a" : "#2a2a2a",
-    color: role === "host" ? "#ffd" : role === "collaborator" ? "#aef" : "#888",
-  }),
   messages: {
     flex: 1,
     overflowY: "auto",
@@ -125,7 +128,7 @@ export function ChatSidebar({
         {users.map((u) => (
           <div key={u.userId} style={styles.userRow}>
             <span>{u.displayName ?? u.userId.slice(0, 8)}</span>
-            <span style={styles.roleBadge(u.role)}>{u.role}</span>
+            <span style={roleBadgeStyle(u.role)}>{u.role}</span>
             {isHost && u.userId !== myUserId && (
               <>
                 {u.role === "viewer" && (
