@@ -130,7 +130,7 @@ describe("RelayServer", () => {
     // First joiner is host; promote to collaborator to test input
     const userId = access.listUsers()[0]?.userId;
     expect(userId).toBeTruthy();
-    access.setRole(userId!, "collaborator");
+    access.setRole(userId!, "edit");
 
     ws.send(encodeMessage({ type: "collab.input", content: "refactor this" }));
     await waitFor(() => (received.length > 0 ? true : undefined));

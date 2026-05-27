@@ -9,8 +9,14 @@ describe("generateToken", () => {
 
   it("sets expiresAt when ttlMs provided", () => {
     const before = Date.now();
-    const st = generateToken("sess-1", 5000);
+    const st = generateToken("sess-1", "edit", 5000);
     expect(st.expiresAt).toBeGreaterThanOrEqual(before + 4990);
+  });
+
+  it("embeds the granted role on the token", () => {
+    expect(generateToken("sess-1", "admin").grantedRole).toBe("admin");
+    expect(generateToken("sess-1", "edit").grantedRole).toBe("edit");
+    expect(generateToken("sess-1", "view").grantedRole).toBe("view");
   });
 
   it("leaves expiresAt undefined when no ttl", () => {
@@ -36,7 +42,7 @@ describe("AccessManager", () => {
     });
 
     it("returns null and cleans up expired token", async () => {
-      const st = mgr.issueToken("sess-1", 1); // 1ms TTL
+      const st = mgr.issueToken("sess-1", "edit", 1); // 1ms TTL
       await new Promise((r) => setTimeout(r, 10));
       expect(mgr.validateToken(st.token)).toBeNull();
       // Second call also null (already cleaned up)
@@ -52,45 +58,45 @@ describe("AccessManager", () => {
 
   describe("users", () => {
     it("adds and retrieves a user", () => {
-      const user = mgr.addUser("u1", "viewer", "Alice");
+      const user = mgr.addUser("u1", "view", "Alice");
       expect(mgr.getUser("u1")).toEqual(user);
     });
 
     it("removes a user", () => {
-      mgr.addUser("u1", "viewer");
+      mgr.addUser("u1", "view");
       mgr.removeUser("u1");
       expect(mgr.getUser("u1")).toBeUndefined();
     });
 
     it("promotes a viewer to collaborator", () => {
-      mgr.addUser("u1", "viewer");
-      expect(mgr.setRole("u1", "collaborator")).toBe(true);
+      mgr.addUser("u1", "view");
+      expect(mgr.setRole("u1", "edit")).toBe(true);
       expect(mgr.canSendInput("u1")).toBe(true);
     });
 
     it("returns false when setting role on unknown user", () => {
-      expect(mgr.setRole("ghost", "collaborator")).toBe(false);
+      expect(mgr.setRole("ghost", "edit")).toBe(false);
     });
 
-    it("identifies host correctly", () => {
-      mgr.addUser("u1", "host");
-      mgr.addUser("u2", "viewer");
-      expect(mgr.isHost("u1")).toBe(true);
-      expect(mgr.isHost("u2")).toBe(false);
+    it("identifies admin correctly", () => {
+      mgr.addUser("u1", "admin");
+      mgr.addUser("u2", "view");
+      expect(mgr.isAdmin("u1")).toBe(true);
+      expect(mgr.isAdmin("u2")).toBe(false);
     });
 
-    it("canSendInput is true for host and collaborator, false for viewer", () => {
-      mgr.addUser("host", "host");
-      mgr.addUser("collab", "collaborator");
-      mgr.addUser("view", "viewer");
-      expect(mgr.canSendInput("host")).toBe(true);
+    it("canSendInput is true for admin and edit, false for view", () => {
+      mgr.addUser("admin", "admin");
+      mgr.addUser("collab", "edit");
+      mgr.addUser("view", "view");
+      expect(mgr.canSendInput("admin")).toBe(true);
       expect(mgr.canSendInput("collab")).toBe(true);
       expect(mgr.canSendInput("view")).toBe(false);
     });
 
     it("lists all users", () => {
-      mgr.addUser("u1", "host");
-      mgr.addUser("u2", "viewer");
+      mgr.addUser("u1", "admin");
+      mgr.addUser("u2", "view");
       expect(mgr.listUsers()).toHaveLength(2);
     });
   });

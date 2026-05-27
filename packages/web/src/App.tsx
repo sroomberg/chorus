@@ -26,8 +26,8 @@ function SessionView({ wsUrl, token, displayName }: SessionViewProps) {
   const [inputMode, setInputMode] = useState(false);
 
   const myUser = session.users.find((u) => u.userId === session.myUserId);
-  const isHost = myUser?.role === "host";
-  const canInput = myUser?.role === "host" || myUser?.role === "collaborator";
+  const isHost = myUser?.role === "admin";
+  const canInput = myUser?.role === "admin" || myUser?.role === "edit";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>

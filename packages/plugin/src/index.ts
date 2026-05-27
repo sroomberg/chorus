@@ -111,43 +111,46 @@ export default async function chorusPlugin(
 
     "tool.register": () => [
       {
-        name: "chorus_share",
-        description: "Expose the current session for viewing or pair programming",
+        name: "chorus-share",
+        description:
+          "Generate a link to share the current session with someone. " +
+          "Call once to start sharing, then again with a role to generate additional links. " +
+          "Roles: edit (default, can send LLM messages), view (read-only), admin (full control).",
         parameters: {
           type: "object",
           properties: {
-            mode: {
+            role: {
               type: "string",
-              enum: ["view", "pair"],
-              description: "view = read-only observers; pair = observers can send LLM messages",
+              enum: ["edit", "view", "admin"],
+              description:
+                "Role to grant the recipient. edit = can send LLM messages (default); " +
+                "view = read-only observer; admin = full control (promote/demote/kick).",
             },
           },
         },
-        execute: async (_params: unknown) => {
-          if (sharing) {
-            const ip = getLanIp();
-            const token = access.issueToken(sessionId);
-            return { url: `http://${ip}:${DEFAULT_PORT}?token=${token.token}`, sharing: true };
+        execute: async (params: unknown) => {
+          const { role = "edit" } = (params as { role?: string }) ?? {};
+          const grantedRole = (
+            role === "admin" ? "admin" : role === "view" ? "view" : "edit"
+          ) as import("@chorus/shared").UserRole;
+
+          if (!sharing) {
+            sharing = true;
+            relay.start();
+            console.log(`[chorus] relay started on port ${DEFAULT_PORT}`);
           }
 
-          sharing = true;
-          relay.start();
-
           const ip = getLanIp();
-          const token = access.issueToken(sessionId);
-          const info: ShareInfo = {
-            url: `http://${ip}:${DEFAULT_PORT}?token=${token.token}`,
-            token: token.token,
-            sessionId,
-            port: DEFAULT_PORT,
-          };
+          const token = access.issueToken(sessionId, grantedRole);
+          const url = `http://${ip}:${DEFAULT_PORT}?token=${token.token}`;
+          const info: ShareInfo = { url, token: token.token, sessionId, port: DEFAULT_PORT };
 
-          console.log(`[chorus] sharing session at ${info.url}`);
+          console.log(`[chorus] ${grantedRole} link: ${url}`);
           return info;
         },
       },
       {
-        name: "chorus_stop",
+        name: "chorus-stop",
         description: "Stop sharing the current session",
         parameters: { type: "object", properties: {} },
         execute: async () => {

@@ -91,11 +91,7 @@ export class RelayServer {
             }
 
             const userId = randomBytes(8).toString("hex");
-            // First connected user is the host (re-joins); otherwise viewer
-            const existingUsers = relay.access.listUsers();
-            const role =
-              existingUsers.length === 0 ? "host" : "viewer";
-            const user = relay.access.addUser(userId, role, msg.displayName);
+            const user = relay.access.addUser(userId, st.grantedRole, msg.displayName);
             (ws.data as Record<string, unknown>)["userId"] = userId;
 
             relay.clients.set(userId, { userId, ws: ws as unknown as WebSocket });
@@ -173,23 +169,23 @@ export class RelayServer {
       }
 
       case "host.promote": {
-        if (!this.access.isHost(userId)) return;
-        if (this.access.setRole(msg.userId, "collaborator")) {
-          this.broadcast({ type: "user.role_changed", userId: msg.userId, role: "collaborator" });
+        if (!this.access.isAdmin(userId)) return;
+        if (this.access.setRole(msg.userId, "edit")) {
+          this.broadcast({ type: "user.role_changed", userId: msg.userId, role: "edit" });
         }
         break;
       }
 
       case "host.demote": {
-        if (!this.access.isHost(userId)) return;
-        if (this.access.setRole(msg.userId, "viewer")) {
-          this.broadcast({ type: "user.role_changed", userId: msg.userId, role: "viewer" });
+        if (!this.access.isAdmin(userId)) return;
+        if (this.access.setRole(msg.userId, "view")) {
+          this.broadcast({ type: "user.role_changed", userId: msg.userId, role: "view" });
         }
         break;
       }
 
       case "host.kick": {
-        if (!this.access.isHost(userId)) return;
+        if (!this.access.isAdmin(userId)) return;
         const target = this.clients.get(msg.userId);
         if (target) {
           (target.ws as unknown as { close: (code: number, reason: string) => void }).close(
@@ -201,7 +197,7 @@ export class RelayServer {
       }
 
       case "host.close": {
-        if (!this.access.isHost(userId)) return;
+        if (!this.access.isAdmin(userId)) return;
         this.broadcast({ type: "session.closed" });
         this.stop();
         break;

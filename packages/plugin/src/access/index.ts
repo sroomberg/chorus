@@ -1,13 +1,18 @@
 import type { SessionToken, ConnectedUser, UserRole } from "@chorus/shared";
 import { randomBytes } from "node:crypto";
 
-export function generateToken(sessionId: string, ttlMs?: number): SessionToken {
+export function generateToken(
+  sessionId: string,
+  role: UserRole = "edit",
+  ttlMs?: number
+): SessionToken {
   const token = randomBytes(32).toString("hex");
   return {
     token,
     sessionId,
     createdAt: Date.now(),
     expiresAt: ttlMs ? Date.now() + ttlMs : undefined,
+    grantedRole: role,
   };
 }
 
@@ -15,8 +20,8 @@ export class AccessManager {
   private tokens = new Map<string, SessionToken>();
   private users = new Map<string, ConnectedUser>();
 
-  issueToken(sessionId: string, ttlMs?: number): SessionToken {
-    const st = generateToken(sessionId, ttlMs);
+  issueToken(sessionId: string, role: UserRole = "edit", ttlMs?: number): SessionToken {
+    const st = generateToken(sessionId, role, ttlMs);
     this.tokens.set(st.token, st);
     return st;
   }
@@ -60,12 +65,12 @@ export class AccessManager {
     return [...this.users.values()];
   }
 
-  isHost(userId: string): boolean {
-    return this.users.get(userId)?.role === "host";
+  isAdmin(userId: string): boolean {
+    return this.users.get(userId)?.role === "admin";
   }
 
   canSendInput(userId: string): boolean {
     const role = this.users.get(userId)?.role;
-    return role === "host" || role === "collaborator";
+    return role === "admin" || role === "edit";
   }
 }

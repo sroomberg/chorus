@@ -17,8 +17,8 @@ function roleBadgeStyle(role: string): React.CSSProperties {
     fontSize: 10,
     padding: "1px 5px",
     borderRadius: 3,
-    background: role === "host" ? "#4a3a00" : role === "collaborator" ? "#003a4a" : "#2a2a2a",
-    color: role === "host" ? "#ffd" : role === "collaborator" ? "#aef" : "#888",
+    background: role === "admin" ? "#4a3a00" : role === "edit" ? "#003a4a" : "#2a2a2a",
+    color: role === "admin" ? "#ffd" : role === "edit" ? "#aef" : "#888",
   };
 }
 
@@ -131,7 +131,7 @@ export function ChatSidebar({
             <span style={roleBadgeStyle(u.role)}>{u.role}</span>
             {isHost && u.userId !== myUserId && (
               <>
-                {u.role === "viewer" && (
+                {u.role === "view" && (
                   <button
                     style={{ fontSize: 11, cursor: "pointer" }}
                     onClick={() => onPromote?.(u.userId)}
@@ -139,7 +139,7 @@ export function ChatSidebar({
                     promote
                   </button>
                 )}
-                {u.role === "collaborator" && (
+                {u.role === "edit" && (
                   <button
                     style={{ fontSize: 11, cursor: "pointer" }}
                     onClick={() => onDemote?.(u.userId)}

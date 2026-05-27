@@ -26,8 +26,8 @@ describe("encodeMessage / decodeServerMessage", () => {
     const msg: ServerMessage = {
       type: "user.list",
       users: [
-        { userId: "u1", role: "host", joinedAt: 1000 },
-        { userId: "u2", role: "viewer", joinedAt: 1001 },
+        { userId: "u1", role: "admin", joinedAt: 1000 },
+        { userId: "u2", role: "view", joinedAt: 1001 },
       ],
     };
     expect(decodeServerMessage(encodeMessage(msg))).toEqual(msg);

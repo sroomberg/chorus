@@ -1,10 +1,11 @@
-export type UserRole = "host" | "collaborator" | "viewer";
+export type UserRole = "admin" | "edit" | "view";
 
 export interface SessionToken {
   token: string;
   sessionId: string;
   createdAt: number;
   expiresAt?: number;
+  grantedRole: UserRole;
 }
 
 export interface ConnectedUser {
