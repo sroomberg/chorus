@@ -7,9 +7,7 @@
   ],
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --parallel",
     "test": "turbo run test",
-    "test:e2e": "turbo run test:e2e",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "clean": "turbo run clean"

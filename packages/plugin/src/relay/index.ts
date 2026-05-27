@@ -30,7 +30,7 @@ export class RelayServer {
     this.onInjectInput = fn;
   }
 
-  start(staticDir?: string): void {
+  start(): void {
     const relay = this;
 
     this.server = Bun.serve({
@@ -46,15 +46,14 @@ export class RelayServer {
           return new Response("WebSocket upgrade failed", { status: 400 });
         }
 
-        // Serve static web app if directory provided
-        if (staticDir) {
-          const filePath =
-            url.pathname === "/" ? "/index.html" : url.pathname;
-          const file = Bun.file(`${staticDir}${filePath}`);
-          return new Response(file);
+        if (url.pathname === "/status") {
+          return new Response(
+            JSON.stringify({ status: "ok", clients: relay.clientCount }),
+            { headers: { "Content-Type": "application/json" } }
+          );
         }
 
-        return new Response("chorus relay", { status: 200 });
+        return new Response("chorus relay — OpenCode only", { status: 200 });
       },
 
       websocket: {
@@ -231,6 +230,10 @@ export class RelayServer {
 
   get isRunning(): boolean {
     return this.server !== null;
+  }
+
+  get clientCount(): number {
+    return this.clients.size;
   }
 
   getPort(): number {
