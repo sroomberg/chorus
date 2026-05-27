@@ -4,18 +4,23 @@ import { useChat } from "./hooks/useChat.js";
 import { TerminalPane } from "./components/TerminalPane/index.js";
 import { ChatSidebar } from "./components/ChatSidebar/index.js";
 import { Controls } from "./components/Controls/index.js";
+import { JoinScreen } from "./components/JoinScreen/index.js";
 
-function getParams(): { wsUrl: string; token: string; displayName?: string } {
+function getParams(): { wsUrl: string; token: string } {
   const sp = new URLSearchParams(window.location.search);
   const token = sp.get("token") ?? "";
-  const displayName = sp.get("name") ?? undefined;
   const host = sp.get("host") ?? window.location.host;
   const wsUrl = `ws://${host}/ws`;
-  return { wsUrl, token, displayName };
+  return { wsUrl, token };
 }
 
-export function App() {
-  const { wsUrl, token, displayName } = useMemo(getParams, []);
+interface SessionViewProps {
+  wsUrl: string;
+  token: string;
+  displayName: string;
+}
+
+function SessionView({ wsUrl, token, displayName }: SessionViewProps) {
   const [session, actions] = useSession(wsUrl, token, displayName);
   const chat = useChat(wsUrl, token, displayName);
   const [inputMode, setInputMode] = useState(false);
@@ -23,14 +28,6 @@ export function App() {
   const myUser = session.users.find((u) => u.userId === session.myUserId);
   const isHost = myUser?.role === "host";
   const canInput = myUser?.role === "host" || myUser?.role === "collaborator";
-
-  if (!token) {
-    return (
-      <div style={{ padding: 40, color: "#f88" }}>
-        No session token provided. Open the URL shared by the session host.
-      </div>
-    );
-  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -43,7 +40,14 @@ export function App() {
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {canInput && (
-            <div style={{ padding: "4px 8px", background: "#1e1e1e", borderBottom: "1px solid #333", fontSize: 12 }}>
+            <div
+              style={{
+                padding: "4px 8px",
+                background: "#1e1e1e",
+                borderBottom: "1px solid #333",
+                fontSize: 12,
+              }}
+            >
               <label style={{ cursor: "pointer", userSelect: "none" }}>
                 <input
                   type="checkbox"
@@ -74,4 +78,23 @@ export function App() {
       </div>
     </div>
   );
+}
+
+export function App() {
+  const { wsUrl, token } = useMemo(getParams, []);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+
+  if (!token) {
+    return (
+      <div style={{ padding: 40, color: "#f88" }}>
+        No session token provided. Open the URL shared by the session host.
+      </div>
+    );
+  }
+
+  if (!displayName) {
+    return <JoinScreen onJoin={setDisplayName} />;
+  }
+
+  return <SessionView wsUrl={wsUrl} token={token} displayName={displayName} />;
 }

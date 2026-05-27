@@ -6,17 +6,24 @@ test.describe("chorus web app", () => {
     await expect(page.getByText("No session token provided")).toBeVisible();
   });
 
-  test("shows controls bar with correct title", async ({ page }) => {
-    // With an invalid token the error state fires; the controls bar should
-    // still render before the error resolves in some form.
-    await page.goto("/?token=invalid");
-    // Title text is present in the controls bar regardless of auth state
-    await expect(page.getByTestId("controls-bar")).toBeVisible();
+  test("shows join screen when token is present", async ({ page }) => {
+    await page.goto("/?token=sometoken");
+    await expect(page.getByTestId("join-name-input")).toBeVisible();
+    await expect(page.getByTestId("join-submit")).toBeVisible();
   });
 
-  test("chat sidebar renders with input", async ({ page }) => {
-    await page.goto("/?token=invalid");
+  test("join button is disabled until name is entered", async ({ page }) => {
+    await page.goto("/?token=sometoken");
+    await expect(page.getByTestId("join-submit")).toBeDisabled();
+    await page.getByTestId("join-name-input").fill("Alice");
+    await expect(page.getByTestId("join-submit")).toBeEnabled();
+  });
+
+  test("submitting name transitions to session view", async ({ page }) => {
+    await page.goto("/?token=sometoken");
+    await page.getByTestId("join-name-input").fill("Alice");
+    await page.getByTestId("join-submit").click();
+    await expect(page.getByTestId("controls-bar")).toBeVisible();
     await expect(page.getByTestId("chat-sidebar")).toBeVisible();
-    await expect(page.getByTestId("chat-input")).toBeVisible();
   });
 });
