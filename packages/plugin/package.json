@@ -20,13 +20,14 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@chorus/shared": "workspace:*",
     "@aws-sdk/client-s3": "^3.726.0",
-    "@aws-sdk/lib-storage": "^3.726.0"
+    "@aws-sdk/lib-storage": "^3.726.0",
+    "@chorus/shared": "workspace:*",
+    "zod": "4.1.8"
   },
   "peerDependencies": {
-    "@opencode-ai/plugin": "*",
-    "@opencode-ai/sdk": "*"
+    "@opencode-ai/plugin": "1.15.11",
+    "@opencode-ai/sdk": "1.15.11"
   },
   "peerDependenciesMeta": {
     "@opencode-ai/plugin": {

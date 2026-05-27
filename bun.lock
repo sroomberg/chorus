@@ -16,6 +16,7 @@
         "@aws-sdk/client-s3": "^3.726.0",
         "@aws-sdk/lib-storage": "^3.726.0",
         "@chorus/shared": "workspace:*",
+        "zod": "4.1.8",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -24,8 +25,8 @@
         "vitest": "^2.1.8",
       },
       "peerDependencies": {
-        "@opencode-ai/plugin": "*",
-        "@opencode-ai/sdk": "*",
+        "@opencode-ai/plugin": "1.15.11",
+        "@opencode-ai/sdk": "1.15.11",
       },
       "optionalPeers": [
         "@opencode-ai/plugin",
@@ -368,6 +369,8 @@
     "why-is-node-running": ["why-is-node-running@2.3.0", "", { "dependencies": { "siginfo": "^2.0.0", "stackback": "0.0.2" }, "bin": { "why-is-node-running": "cli.js" } }, "sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w=="],
 
     "xml-naming": ["xml-naming@0.1.0", "", {}, "sha512-k8KO9hrMyNk6tUWqUfkTEZbezRRpONVOzUTnc97VnCvyj6Tf9lyUR9EDAIeiVLv56jsMcoXEwjW8Kv5yPY52lw=="],
+
+    "zod": ["zod@4.1.8", "", {}, "sha512-5R1P+WwQqmmMIEACyzSvo4JXHY5WiAFHRMg+zBZKgKS+Q1viRa0C1hmUKtHltoIFKtIdki3pRxkmpP74jnNYHQ=="],
 
     "rollup/@types/estree": ["@types/estree@1.0.8", "", {}, "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="],
   }

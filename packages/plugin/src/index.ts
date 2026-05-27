@@ -3,13 +3,13 @@ import { RelayServer } from "./relay/index.js";
 import { JoinClient } from "./join/index.js";
 import type { BackupAdapter } from "./backup/index.js";
 import { S3BackupAdapter } from "./backup/index.js";
-import type { SessionEvent, ShareInfo } from "@chorus/shared";
+import type { SessionEvent, ShareInfo, UserRole } from "@chorus/shared";
 import { networkInterfaces } from "node:os";
 import { mkdirSync, existsSync, copyFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-
+import { z } from "zod";
 
 const DEFAULT_PORT = parseInt(process.env["CHORUS_PORT"] ?? "7742", 10);
 
@@ -57,39 +57,30 @@ function buildBackupAdapter(): BackupAdapter | null {
 // ──────────────────────────────────────────────────────────────────────────────
 // OpenCode plugin entry point
 //
-// OpenCode loads this file as an ES module from .opencode/plugin/.
-// The default export must be the plugin function (or an object with a default).
+// API: https://github.com/sst/opencode — @opencode-ai/plugin v1.15.11
+// Plugin receives a single PluginInput and returns a Hooks object.
+// Tools are registered via hooks.tool as { [name]: { description, args, execute } }
+// where args is a Zod raw shape (NOT JSON Schema).
 // ──────────────────────────────────────────────────────────────────────────────
 
-interface OpenCodeApp {
-  dir: string;
-}
-
-interface OpenCodeClient {
-  session: {
-    send: (sessionId: string, content: string) => Promise<void>;
+interface PluginInput {
+  client: {
+    session: {
+      prompt(opts: {
+        throwOnError?: boolean;
+        path: { id: string };
+        body: { parts: Array<{ type: "text"; text: string }> };
+      }): Promise<unknown>;
+    };
   };
 }
 
-interface PluginHooks {
-  "chat.message"?: (msg: {
-    sessionId: string;
-    type: string;
-    content: unknown;
-  }) => void | Promise<void>;
-  "tool.register"?: () => {
-    name: string;
-    description: string;
-    parameters: unknown;
-    execute: (params: unknown) => Promise<unknown>;
-  }[];
-  dispose?: () => void | Promise<void>;
+interface ToolContext {
+  sessionID: string;
+  directory: string;
 }
 
-export default async function chorusPlugin(
-  app: OpenCodeApp,
-  client: OpenCodeClient
-): Promise<PluginHooks> {
+export default async function chorusPlugin(input: PluginInput) {
   installCommands();
 
   const access = new AccessManager();
@@ -100,34 +91,48 @@ export default async function chorusPlugin(
   let sharing = false;
   const events: SessionEvent[] = [];
 
-  // Active join connection (when this instance has joined someone else's session)
   let joinClient: JoinClient | null = null;
 
   relay.setInputHandler(async (content, userId) => {
     if (!sessionId) return;
     console.log(`[chorus] injecting input from ${userId}: ${content.slice(0, 40)}`);
-    await client.session.send(sessionId, content);
+    await input.client.session.prompt({
+      throwOnError: true,
+      path: { id: sessionId },
+      body: { parts: [{ type: "text", text: content }] },
+    });
   });
 
   return {
-    "chat.message": async (msg) => {
-      sessionId = msg.sessionId;
+    "chat.message": async (
+      chatInput: { sessionID: string },
+      output: { parts: Array<{ type: string; text?: string; synthetic?: boolean }> }
+    ) => {
+      sessionId = chatInput.sessionID;
 
-      // Forward to the host relay when joined as a collaborator/admin
       if (joinClient) {
         const state = joinClient.getState();
-        if (state.status === "connected" && msg.type === "user") {
-          joinClient.sendInput(String(msg.content));
+        if (state.status === "connected") {
+          const text = output.parts
+            .filter((p) => p.type === "text" && !p.synthetic)
+            .map((p) => p.text ?? "")
+            .join("\n");
+          if (text) joinClient.sendInput(text);
         }
       }
 
       if (!sharing) return;
 
+      const text = output.parts
+        .filter((p) => p.type === "text" && !p.synthetic)
+        .map((p) => p.text ?? "")
+        .join("\n");
+
       const event: SessionEvent = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        sessionId: msg.sessionId,
-        type: msg.type,
-        payload: msg.content,
+        sessionId: chatInput.sessionID,
+        type: "user",
+        payload: text,
         timestamp: Date.now(),
       };
       events.push(event);
@@ -136,7 +141,7 @@ export default async function chorusPlugin(
       if (backup) {
         backup
           .save({
-            sessionId: msg.sessionId,
+            sessionId: chatInput.sessionID,
             events,
             messages: [],
             startedAt: events[0]?.timestamp ?? Date.now(),
@@ -145,30 +150,24 @@ export default async function chorusPlugin(
       }
     },
 
-    "tool.register": () => [
-      {
-        name: "chorus-share",
+    tool: {
+      "chorus-share": {
         description:
           "Start sharing this session and generate a join token for a collaborator. " +
           "The recipient must have OpenCode + the chorus plugin installed and run chorus-join. " +
           "Roles: edit (default, can send LLM messages), view (read-only), admin (full control).",
-        parameters: {
-          type: "object",
-          properties: {
-            role: {
-              type: "string",
-              enum: ["edit", "view", "admin"],
-              description:
-                "Role for the recipient. edit = can contribute (default); " +
-                "view = read-only; admin = full control.",
-            },
-          },
+        args: {
+          role: z
+            .enum(["edit", "view", "admin"])
+            .optional()
+            .describe(
+              "Role for the recipient. edit = can contribute (default); " +
+                "view = read-only; admin = full control."
+            ),
         },
-        execute: async (params: unknown) => {
-          const { role = "edit" } = (params as { role?: string }) ?? {};
-          const grantedRole = (
-            role === "admin" ? "admin" : role === "view" ? "view" : "edit"
-          ) as import("@chorus/shared").UserRole;
+        async execute(args: { role?: "edit" | "view" | "admin" }, context: ToolContext) {
+          const grantedRole: UserRole =
+            args.role === "admin" ? "admin" : args.role === "view" ? "view" : "edit";
 
           if (!sharing) {
             sharing = true;
@@ -177,121 +176,107 @@ export default async function chorusPlugin(
           }
 
           const ip = getLanIp();
-          const token = access.issueToken(sessionId, grantedRole);
+          const sid = sessionId || context.sessionID;
+          const token = access.issueToken(sid, grantedRole);
           const info: ShareInfo & { role: string } = {
             token: token.token,
-            sessionId,
+            sessionId: sid,
             port: DEFAULT_PORT,
             url: `${ip}:${DEFAULT_PORT}`,
             role: grantedRole,
           };
 
           console.log(`[chorus] ${grantedRole} token generated — share with: ${info.url}`);
-          return {
+          return JSON.stringify({
             ...info,
             instructions: `Recipient should run: chorus-join with token "${token.token}" and host "${ip}:${DEFAULT_PORT}"`,
-          };
+          });
         },
       },
-      {
-        name: "chorus-join",
+
+      "chorus-join": {
         description:
           "Join another user's shared OpenCode session. " +
           "Requires the token and host address provided by the session organizer via chorus-share. " +
           "Once joined, your messages are also forwarded to the shared session.",
-        parameters: {
-          type: "object",
-          required: ["token", "host"],
-          properties: {
-            token: {
-              type: "string",
-              description: "The session token provided by the organizer.",
-            },
-            host: {
-              type: "string",
-              description: "Host address of the organizer's relay, e.g. 192.168.1.5:7742",
-            },
-            name: {
-              type: "string",
-              description: "Your display name in the session (defaults to system username).",
-            },
-          },
+        args: {
+          token: z.string().describe("The session token provided by the organizer."),
+          host: z
+            .string()
+            .describe("Host address of the organizer's relay, e.g. 192.168.1.5:7742"),
+          name: z
+            .string()
+            .optional()
+            .describe("Your display name in the session (defaults to system username)."),
         },
-        execute: async (params: unknown) => {
-          const { token, host, name } = params as {
-            token: string;
-            host: string;
-            name?: string;
-          };
-
+        async execute(args: { token: string; host: string; name?: string }) {
           if (joinClient) {
             joinClient.disconnect();
             joinClient = null;
           }
 
-          const displayName = name ?? process.env["USER"] ?? "unknown";
-          const wsUrl = `ws://${host}/ws`;
-          const jc = new JoinClient(wsUrl, token, displayName);
+          const displayName = args.name ?? process.env["USER"] ?? "unknown";
+          const jc = new JoinClient(`ws://${args.host}/ws`, args.token, displayName);
 
           try {
             await jc.connect();
           } catch (err) {
-            return {
+            return JSON.stringify({
               joined: false,
               error: err instanceof Error ? err.message : String(err),
-            };
+            });
           }
 
           joinClient = jc;
           const state = jc.getState();
-
-          return {
+          return JSON.stringify({
             joined: true,
             users: state.users,
             recentEventCount: state.recentEvents.length,
             message:
               "Connected. Your messages will now be forwarded to the shared session. " +
               "Run chorus-leave to disconnect.",
-          };
+          });
         },
       },
-      {
-        name: "chorus-leave",
+
+      "chorus-leave": {
         description: "Leave the currently joined session.",
-        parameters: { type: "object", properties: {} },
-        execute: async () => {
-          if (!joinClient) return { left: false, message: "Not currently joined to any session." };
+        args: {},
+        async execute() {
+          if (!joinClient)
+            return JSON.stringify({ left: false, message: "Not currently joined to any session." });
           joinClient.disconnect();
           joinClient = null;
-          return { left: true };
+          return JSON.stringify({ left: true });
         },
       },
-      {
-        name: "chorus-status",
+
+      "chorus-status": {
         description:
           "Show the current chorus state: whether sharing, joined, and who is connected.",
-        parameters: { type: "object", properties: {} },
-        execute: async () => {
+        args: {},
+        async execute() {
           const shareInfo = sharing
             ? { sharing: true, clients: relay.clientCount, port: DEFAULT_PORT }
             : { sharing: false };
           const joinInfo = joinClient
             ? { joined: true, ...joinClient.getState() }
             : { joined: false };
-          return { ...shareInfo, ...joinInfo };
+          return JSON.stringify({ ...shareInfo, ...joinInfo });
         },
       },
-      {
-        name: "chorus-stop",
+
+      "chorus-stop": {
         description: "Stop sharing the current session.",
-        parameters: { type: "object", properties: {} },
-        execute: async () => {
+        args: {},
+        async execute() {
           sharing = false;
           relay.stop();
-          return { stopped: true };
+          return JSON.stringify({ stopped: true });
         },
       },
-    ],
+    },
 
     dispose: async () => {
       joinClient?.disconnect();
