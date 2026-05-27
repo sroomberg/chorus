@@ -95,7 +95,8 @@ export class RelayServer {
 
             relay.clients.set(userId, { userId, ws: ws as unknown as WebSocket });
 
-            // Send history + current users to the new joiner
+            // Send history and existing users (excluding self) to the new joiner.
+            // The subsequent user.joined broadcast adds the joiner to everyone's list.
             ws.send(
               encodeMessage({
                 type: "session.history",
@@ -103,10 +104,13 @@ export class RelayServer {
               })
             );
             ws.send(
-              encodeMessage({ type: "user.list", users: relay.access.listUsers() })
+              encodeMessage({
+                type: "user.list",
+                users: relay.access.listUsers().filter((u) => u.userId !== userId),
+              })
             );
 
-            // Notify everyone of the new user
+            // Notify everyone (including the joiner) of the new user
             relay.broadcast({ type: "user.joined", user });
             return;
           }
