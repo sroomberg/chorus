@@ -18,6 +18,8 @@ export { S3BackupAdapter } from "./backup/index.js";
 
 const DEFAULT_PORT = parseInt(process.env["CHORUS_PORT"] ?? "7742", 10);
 
+// TODO: replace with native plugin slash command registration once supported
+// https://github.com/sst/opencode/issues/5305
 function installCommands(): void {
   try {
     const pluginDir = dirname(fileURLToPath(import.meta.url));
