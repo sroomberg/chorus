@@ -5,6 +5,10 @@ import type { BackupAdapter } from "./backup/index.js";
 import { S3BackupAdapter } from "./backup/index.js";
 import type { SessionEvent, ShareInfo } from "@chorus/shared";
 import { networkInterfaces } from "node:os";
+import { mkdirSync, existsSync, copyFileSync, readdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 
 export { AccessManager } from "./access/index.js";
 export { RelayServer } from "./relay/index.js";
@@ -13,6 +17,25 @@ export type { BackupAdapter } from "./backup/index.js";
 export { S3BackupAdapter } from "./backup/index.js";
 
 const DEFAULT_PORT = parseInt(process.env["CHORUS_PORT"] ?? "7742", 10);
+
+function installCommands(): void {
+  try {
+    const pluginDir = dirname(fileURLToPath(import.meta.url));
+    const srcDir = join(pluginDir, "..", "commands");
+    const destDir = join(homedir(), ".config", "opencode", "commands");
+    if (!existsSync(srcDir)) return;
+    mkdirSync(destDir, { recursive: true });
+    for (const file of readdirSync(srcDir).filter((f) => f.endsWith(".md"))) {
+      const dest = join(destDir, file);
+      if (!existsSync(dest)) {
+        copyFileSync(join(srcDir, file), dest);
+        console.log(`[chorus] installed slash command: /${file.replace(".md", "")}`);
+      }
+    }
+  } catch {
+    // Non-fatal — commands can be installed manually
+  }
+}
 
 function getLanIp(): string {
   const nets = networkInterfaces();
@@ -70,6 +93,8 @@ export default async function chorusPlugin(
   app: OpenCodeApp,
   client: OpenCodeClient
 ): Promise<PluginHooks> {
+  installCommands();
+
   const access = new AccessManager();
   const relay = new RelayServer(access, DEFAULT_PORT);
   const backup = buildBackupAdapter();
