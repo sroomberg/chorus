@@ -10,12 +10,14 @@ export type ServerMessage =
   | { type: "user.left"; userId: string }
   | { type: "user.role_changed"; userId: string; role: UserRole }
   | { type: "user.list"; users: ConnectedUser[] }
+  | { type: "user.typing"; userId: string; displayName?: string }
   | { type: "error"; code: string; message: string };
 
 // Messages sent from client (browser) to server (plugin relay)
 export type ClientMessage =
   | { type: "auth"; token: string; displayName?: string }
   | { type: "chat.send"; content: string }
+  | { type: "typing" }
   | { type: "collab.input"; content: string }
   | { type: "host.promote"; userId: string }
   | { type: "host.demote"; userId: string }

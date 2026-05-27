@@ -69,7 +69,10 @@ interface PluginInput {
       prompt(opts: {
         throwOnError?: boolean;
         path: { id: string };
-        body: { parts: Array<{ type: "text"; text: string }> };
+        body: {
+          noReply?: boolean;
+          parts: Array<{ type: "text"; text: string; synthetic?: boolean }>;
+        };
       }): Promise<unknown>;
     };
   };
@@ -93,14 +96,46 @@ export default async function chorusPlugin(input: PluginInput) {
 
   let joinClient: JoinClient | null = null;
 
+  // Inject a silent notification into the current session (noReply + synthetic so the LLM ignores it)
+  async function injectNotification(sid: string, text: string): Promise<void> {
+    if (!sid) return;
+    await input.client.session
+      .prompt({
+        throwOnError: false,
+        path: { id: sid },
+        body: { noReply: true, parts: [{ type: "text", text, synthetic: true }] },
+      })
+      .catch(() => {});
+  }
+
+  // Track when we're injecting a collab message so chat.message hook can skip pushing it as an event
+  let pendingCollabInject = false;
+
   relay.setInputHandler(async (content, userId) => {
     if (!sessionId) return;
-    console.log(`[chorus] injecting input from ${userId}: ${content.slice(0, 40)}`);
-    await input.client.session.prompt({
-      throwOnError: true,
-      path: { id: sessionId },
-      body: { parts: [{ type: "text", text: content }] },
-    });
+    const user = access.getUser(userId);
+    const label = user?.displayName ?? userId.slice(0, 8);
+    console.log(`[chorus] injecting input from ${label}: ${content.slice(0, 40)}`);
+    pendingCollabInject = true;
+    try {
+      await input.client.session.prompt({
+        throwOnError: true,
+        path: { id: sessionId },
+        body: { parts: [{ type: "text", text: `[${label}]: ${content}` }] },
+      });
+    } finally {
+      pendingCollabInject = false;
+    }
+  });
+
+  relay.setChatHandler((displayName, content) => {
+    const label = displayName ?? "guest";
+    injectNotification(sessionId, `💬 [${label}]: ${content}`).catch(console.error);
+  });
+
+  relay.setTypingHandler((displayName) => {
+    const label = displayName ?? "someone";
+    injectNotification(sessionId, `✏️ [${label}] is typing…`).catch(console.error);
   });
 
   return {
@@ -128,6 +163,9 @@ export default async function chorusPlugin(input: PluginInput) {
         .map((p) => p.text ?? "")
         .join("\n");
 
+      // Skip collab-injected and synthetic messages — they're already visible in both sessions
+      if (!text || pendingCollabInject) return;
+
       const event: SessionEvent = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         sessionId: chatInput.sessionID,
@@ -148,6 +186,24 @@ export default async function chorusPlugin(input: PluginInput) {
           })
           .catch(console.error);
       }
+    },
+
+    "experimental.text.complete": async (
+      hookInput: { sessionID: string; messageID: string; partID: string },
+      hookOutput: { text: string }
+    ) => {
+      sessionId = hookInput.sessionID;
+      if (!sharing || !hookOutput.text) return;
+
+      const event: SessionEvent = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        sessionId: hookInput.sessionID,
+        type: "assistant",
+        payload: hookOutput.text,
+        timestamp: Date.now(),
+      };
+      events.push(event);
+      relay.pushEvent(event);
     },
 
     tool: {
@@ -227,6 +283,29 @@ export default async function chorusPlugin(input: PluginInput) {
             });
           }
 
+          jc.setChatHandler((msgDisplayName, content) => {
+            const label = msgDisplayName ?? "host";
+            injectNotification(sessionId, `💬 [${label}]: ${content}`).catch(console.error);
+          });
+
+          jc.setTypingHandler((typingDisplayName) => {
+            const label = typingDisplayName ?? "someone";
+            injectNotification(sessionId, `✏️ [${label}] is typing…`).catch(console.error);
+          });
+
+          jc.setEventHandler((event) => {
+            if (!sessionId) return;
+            const payload =
+              typeof event.payload === "string"
+                ? event.payload
+                : JSON.stringify(event.payload);
+            if (event.type === "user") {
+              injectNotification(sessionId, `[Host]: ${payload}`).catch(console.error);
+            } else if (event.type === "assistant") {
+              injectNotification(sessionId, `[AI]: ${payload}`).catch(console.error);
+            }
+          });
+
           joinClient = jc;
           const state = jc.getState();
           return JSON.stringify({
@@ -249,6 +328,31 @@ export default async function chorusPlugin(input: PluginInput) {
           joinClient.disconnect();
           joinClient = null;
           return JSON.stringify({ left: true });
+        },
+      },
+
+      "chorus-chat": {
+        description:
+          "Send a chat message to all participants in the current chorus session. " +
+          "Visible to both the host and all joined collaborators as an inline notification.",
+        args: {
+          message: z.string().describe("The message to send to all participants."),
+        },
+        async execute(args: { message: string }) {
+          if (sharing) {
+            const displayName = process.env["USER"] ?? "Host";
+            relay.sendChat(displayName, args.message);
+            return JSON.stringify({ sent: true, via: "relay" });
+          }
+          if (joinClient?.getState().status === "connected") {
+            joinClient.sendTyping();
+            joinClient.sendChat(args.message);
+            return JSON.stringify({ sent: true, via: "join" });
+          }
+          return JSON.stringify({
+            sent: false,
+            message: "Not currently sharing or joined to a session.",
+          });
         },
       },
 

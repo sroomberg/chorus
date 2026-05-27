@@ -19,6 +19,8 @@ export class JoinClient {
   private ws: WebSocket | null = null;
   private state: JoinState;
   private onEvent?: (event: SessionEvent) => void;
+  private onChatMessage?: (displayName: string | undefined, content: string) => void;
+  private onTyping?: (displayName: string | undefined) => void;
 
   constructor(
     private readonly relayUrl: string,
@@ -80,6 +82,14 @@ export class JoinClient {
             );
             break;
 
+          case "chat.message":
+            this.onChatMessage?.(msg.message.displayName, msg.message.content);
+            break;
+
+          case "user.typing":
+            this.onTyping?.(msg.displayName);
+            break;
+
           case "session.closed":
             this.state.status = "disconnected";
             ws.close();
@@ -120,8 +130,21 @@ export class JoinClient {
     this.ws.send(encodeMessage({ type: "chat.send", content }));
   }
 
+  setChatHandler(fn: (displayName: string | undefined, content: string) => void): void {
+    this.onChatMessage = fn;
+  }
+
+  setTypingHandler(fn: (displayName: string | undefined) => void): void {
+    this.onTyping = fn;
+  }
+
   setEventHandler(fn: (event: SessionEvent) => void): void {
     this.onEvent = fn;
+  }
+
+  sendTyping(): void {
+    if (!this.ws || this.state.status !== "connected") return;
+    this.ws.send(encodeMessage({ type: "typing" }));
   }
 
   getState(): Readonly<JoinState> {

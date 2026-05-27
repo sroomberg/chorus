@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.2 — 2026-05-27
+
+- Feature: `chorus-chat` tool — send inline chat messages visible to all participants without triggering the LLM
+- Feature: host and joiner both see all prompts and AI responses labeled by sender — `[Host]:`, `[JoinerName]:`, `[AI]:`
+- Feature: "user typing…" bubble — brief notification injected when a collaborator is about to send a chat message
+- Feature: AI responses now forwarded to joiners via `experimental.text.complete` hook
+- Fix: empty synthetic messages no longer pushed as session events when notifications are injected
+
 ## v0.1.1 — 2026-05-27
 
 - Fix: plugin failed to load — OpenCode calls every module export as a factory function, so named class re-exports (`AccessManager`, `RelayServer`, etc.) caused a "class constructor called without new" crash on startup

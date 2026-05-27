@@ -20,6 +20,8 @@ export class RelayServer {
   private server: ReturnType<typeof Bun.serve> | null = null;
   private inputQueue: Array<{ userId: string; content: string }> = [];
   private onInjectInput?: (content: string, userId: string) => Promise<void>;
+  private onChatMessage?: (displayName: string | undefined, content: string) => void;
+  private onTyping?: (displayName: string | undefined) => void;
 
   constructor(
     private readonly access: AccessManager,
@@ -28,6 +30,28 @@ export class RelayServer {
 
   setInputHandler(fn: (content: string, userId: string) => Promise<void>): void {
     this.onInjectInput = fn;
+  }
+
+  setChatHandler(fn: (displayName: string | undefined, content: string) => void): void {
+    this.onChatMessage = fn;
+  }
+
+  setTypingHandler(fn: (displayName: string | undefined) => void): void {
+    this.onTyping = fn;
+  }
+
+  sendChat(displayName: string | undefined, content: string): void {
+    const chatMsg: ChatMessage = {
+      id: randomBytes(8).toString("hex"),
+      sessionId: "",
+      userId: "host",
+      displayName,
+      content,
+      timestamp: Date.now(),
+    };
+    this.chatHistory.push(chatMsg);
+    this.broadcast({ type: "chat.message", message: chatMsg });
+    this.onChatMessage?.(displayName, content);
   }
 
   start(): void {
@@ -140,6 +164,19 @@ export class RelayServer {
 
   private handleClientMessage(userId: string, msg: ClientMessage, ws: WebSocket): void {
     switch (msg.type) {
+      case "typing": {
+        const user = this.access.getUser(userId);
+        // Broadcast to everyone except the sender
+        const encoded = encodeMessage({ type: "user.typing", userId, displayName: user?.displayName });
+        for (const [cid, client] of this.clients) {
+          if (cid !== userId) {
+            (client.ws as unknown as { send: (s: string) => void }).send(encoded);
+          }
+        }
+        this.onTyping?.(user?.displayName);
+        break;
+      }
+
       case "chat.send": {
         const user = this.access.getUser(userId);
         const chatMsg: ChatMessage = {
@@ -152,6 +189,7 @@ export class RelayServer {
         };
         this.chatHistory.push(chatMsg);
         this.broadcast({ type: "chat.message", message: chatMsg });
+        this.onChatMessage?.(user?.displayName, msg.content);
         break;
       }
 
