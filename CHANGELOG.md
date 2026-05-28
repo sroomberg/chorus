@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.2 — 2026-05-27
+## v0.1.3 — 2026-05-27
 
 - Feature: `chorus-chat` tool — send chat messages visible to all participants as temporary TUI toasts
 - Feature: host and joiner both see prompts and AI responses labeled by sender via TUI toasts — `[Host]:`, `[JoinerName]:`, `[AI]:`
