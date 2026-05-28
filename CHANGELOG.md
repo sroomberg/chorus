@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.4 — 2026-05-27
+## v0.1.5 — 2026-05-27
 
 - Fix: `chorus-share` output now shows a ready-to-run `/chorus-join` command instead of raw token + host fields
 
