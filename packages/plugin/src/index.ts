@@ -249,11 +249,12 @@ export default async function chorusPlugin(input: PluginInput) {
             role: grantedRole,
           };
 
-          say(sid, `${grantedRole} token issued — share with: ${ip}:${DEFAULT_PORT}\ntoken: ${token.token}`);
+          const joinCommand = `/chorus-join token="${token.token}" host="${ip}:${DEFAULT_PORT}"`;
+          say(sid, `Send this command to your collaborator:\n${joinCommand}`);
 
           return JSON.stringify({
             ...info,
-            instructions: `Recipient should run: chorus-join with token "${token.token}" and host "${ip}:${DEFAULT_PORT}"`,
+            connect: joinCommand,
           });
         },
       },

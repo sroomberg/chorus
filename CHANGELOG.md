@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.4 — 2026-05-27
+
+- Fix: `chorus-share` output now shows a ready-to-run `/chorus-join` command instead of raw token + host fields
+
 ## v0.1.3 — 2026-05-27
 
 - Feature: `chorus-chat` tool — send chat messages visible to all participants as temporary TUI toasts
