@@ -2,11 +2,11 @@
 
 ## v0.1.2 — 2026-05-27
 
-- Feature: `chorus-chat` tool — send inline chat messages visible to all participants without triggering the LLM
-- Feature: host and joiner both see all prompts and AI responses labeled by sender — `[Host]:`, `[JoinerName]:`, `[AI]:`
-- Feature: "user typing…" bubble — brief notification injected when a collaborator is about to send a chat message
-- Feature: AI responses now forwarded to joiners via `experimental.text.complete` hook
-- Fix: empty synthetic messages no longer pushed as session events when notifications are injected
+- Feature: `chorus-chat` tool — send chat messages visible to all participants as temporary TUI toasts
+- Feature: host and joiner both see prompts and AI responses labeled by sender via TUI toasts — `[Host]:`, `[JoinerName]:`, `[AI]:`
+- Feature: "user typing…" bubble — 2-second toast shown when a collaborator is about to send a chat message
+- Feature: AI responses forwarded to joiners via `experimental.text.complete` hook; shown as truncated preview toasts
+- Fix: notifications are temporary toasts (not injected into session history) so they don't clutter the conversation
 
 ## v0.1.1 — 2026-05-27
 

@@ -75,6 +75,17 @@ interface PluginInput {
         };
       }): Promise<unknown>;
     };
+    tui: {
+      showToast(opts?: {
+        body?: {
+          title?: string;
+          message: string;
+          variant: "info" | "success" | "warning" | "error";
+          duration?: number;
+        };
+        query?: { directory?: string };
+      }): Promise<unknown>;
+    };
   };
 }
 
@@ -96,16 +107,8 @@ export default async function chorusPlugin(input: PluginInput) {
 
   let joinClient: JoinClient | null = null;
 
-  // Inject a silent notification into the current session (noReply + synthetic so the LLM ignores it)
-  async function injectNotification(sid: string, text: string): Promise<void> {
-    if (!sid) return;
-    await input.client.session
-      .prompt({
-        throwOnError: false,
-        path: { id: sid },
-        body: { noReply: true, parts: [{ type: "text", text, synthetic: true }] },
-      })
-      .catch(() => {});
+  function toast(message: string, variant: "info" | "success" | "warning" | "error" = "info", duration = 4000): void {
+    input.client.tui.showToast({ body: { message, variant, duration } }).catch(() => {});
   }
 
   // Track when we're injecting a collab message so chat.message hook can skip pushing it as an event
@@ -129,13 +132,11 @@ export default async function chorusPlugin(input: PluginInput) {
   });
 
   relay.setChatHandler((displayName, content) => {
-    const label = displayName ?? "guest";
-    injectNotification(sessionId, `💬 [${label}]: ${content}`).catch(console.error);
+    toast(`💬 [${displayName ?? "guest"}]: ${content}`);
   });
 
   relay.setTypingHandler((displayName) => {
-    const label = displayName ?? "someone";
-    injectNotification(sessionId, `✏️ [${label}] is typing…`).catch(console.error);
+    toast(`✏️ [${displayName ?? "someone"}] is typing…`, "info", 2000);
   });
 
   return {
@@ -284,25 +285,24 @@ export default async function chorusPlugin(input: PluginInput) {
           }
 
           jc.setChatHandler((msgDisplayName, content) => {
-            const label = msgDisplayName ?? "host";
-            injectNotification(sessionId, `💬 [${label}]: ${content}`).catch(console.error);
+            toast(`💬 [${msgDisplayName ?? "host"}]: ${content}`);
           });
 
           jc.setTypingHandler((typingDisplayName) => {
-            const label = typingDisplayName ?? "someone";
-            injectNotification(sessionId, `✏️ [${label}] is typing…`).catch(console.error);
+            toast(`✏️ [${typingDisplayName ?? "someone"}] is typing…`, "info", 2000);
           });
 
           jc.setEventHandler((event) => {
-            if (!sessionId) return;
             const payload =
               typeof event.payload === "string"
                 ? event.payload
                 : JSON.stringify(event.payload);
             if (event.type === "user") {
-              injectNotification(sessionId, `[Host]: ${payload}`).catch(console.error);
+              toast(`[Host]: ${payload}`);
             } else if (event.type === "assistant") {
-              injectNotification(sessionId, `[AI]: ${payload}`).catch(console.error);
+              // AI responses can be long — show a truncated preview toast
+              const preview = payload.length > 120 ? `${payload.slice(0, 117)}…` : payload;
+              toast(`[AI]: ${preview}`);
             }
           });
 
