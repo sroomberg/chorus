@@ -111,6 +111,12 @@ export default async function chorusPlugin(input: PluginInput) {
     input.client.tui.showToast({ body: { message, variant, duration } }).catch(() => {});
   }
 
+  function say(sid: string, text: string): void {
+    input.client.session
+      .prompt({ throwOnError: false, path: { id: sid }, body: { noReply: true, parts: [{ type: "text", text }] } })
+      .catch(() => {});
+  }
+
   // Track when we're injecting a collab message so chat.message hook can skip pushing it as an event
   let pendingCollabInject = false;
 
@@ -225,14 +231,15 @@ export default async function chorusPlugin(input: PluginInput) {
           const grantedRole: UserRole =
             args.role === "admin" ? "admin" : args.role === "view" ? "view" : "edit";
 
+          const sid = sessionId || context.sessionID;
+
           if (!sharing) {
             sharing = true;
             relay.start();
-
+            say(sid, `chorus relay started on port ${DEFAULT_PORT}`);
           }
 
           const ip = getLanIp();
-          const sid = sessionId || context.sessionID;
           const token = access.issueToken(sid, grantedRole);
           const info: ShareInfo & { role: string } = {
             token: token.token,
@@ -241,6 +248,8 @@ export default async function chorusPlugin(input: PluginInput) {
             url: `${ip}:${DEFAULT_PORT}`,
             role: grantedRole,
           };
+
+          say(sid, `${grantedRole} token issued — share with: ${ip}:${DEFAULT_PORT}\ntoken: ${token.token}`);
 
           return JSON.stringify({
             ...info,
