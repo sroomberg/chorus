@@ -26,7 +26,7 @@ function installCommands(): void {
       const dest = join(destDir, file);
       if (!existsSync(dest)) {
         copyFileSync(join(srcDir, file), dest);
-        console.log(`[chorus] installed slash command: /${file.replace(".md", "")}`);
+
       }
     }
   } catch {
@@ -118,7 +118,6 @@ export default async function chorusPlugin(input: PluginInput) {
     if (!sessionId) return;
     const user = access.getUser(userId);
     const label = user?.displayName ?? userId.slice(0, 8);
-    console.log(`[chorus] injecting input from ${label}: ${content.slice(0, 40)}`);
     pendingCollabInject = true;
     try {
       await input.client.session.prompt({
@@ -229,7 +228,7 @@ export default async function chorusPlugin(input: PluginInput) {
           if (!sharing) {
             sharing = true;
             relay.start();
-            console.log(`[chorus] relay started on port ${DEFAULT_PORT}`);
+
           }
 
           const ip = getLanIp();
@@ -243,7 +242,6 @@ export default async function chorusPlugin(input: PluginInput) {
             role: grantedRole,
           };
 
-          console.log(`[chorus] ${grantedRole} token generated — share with: ${info.url}`);
           return JSON.stringify({
             ...info,
             instructions: `Recipient should run: chorus-join with token "${token.token}" and host "${ip}:${DEFAULT_PORT}"`,
