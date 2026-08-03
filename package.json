@@ -12,7 +12,10 @@
     "test": "bun run build:relay && bun run test:relay && turbo run test",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
-    "clean": "turbo run clean && cargo clean"
+    "clean": "turbo run clean && cargo clean",
+    "multi-agent": "bun scripts/multi-agent.ts",
+    "test:multi-agent": "bun scripts/multi-agent.ts setup --agents 2 && bun scripts/multi-agent.ts up --agents 2 && bun scripts/multi-agent.ts smoke && bun scripts/multi-agent.ts pair && bun scripts/multi-agent.ts down",
+    "test:relay-stress": "bun scripts/multi-agent.ts relay-stress --agents 5"
   },
   "devDependencies": {
     "turbo": "^2.3.3",
