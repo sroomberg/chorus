@@ -6,11 +6,13 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "turbo run build",
-    "test": "turbo run test",
+    "build:relay": "cargo build -p chorus-relay --release",
+    "test:relay": "cargo test -p chorus-relay",
+    "build": "bun run build:relay && turbo run build",
+    "test": "bun run build:relay && bun run test:relay && turbo run test",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean && cargo clean"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

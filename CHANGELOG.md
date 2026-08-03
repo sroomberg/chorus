@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Replace in-process Bun WebSocket relay with Rust `chorus-relay` binary (`crates/chorus-relay`)
+- Host control protocol on `/host` (token issue, session events, chat, collab.input fan-in)
+- Joiner protocol on `/ws` unchanged
+- Plugin spawns/manages the relay subprocess (`CHORUS_RELAY_BIN` override)
+
 ## v0.1.6 — 2026-05-27
 
 - Fix: `chorus-share` output now shows a ready-to-run `/chorus-join` command instead of raw token + host fields
