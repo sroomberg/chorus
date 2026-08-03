@@ -78,6 +78,7 @@ Remote tunneling (`bore` / `cloudflared`) is not implemented yet — share a LAN
 
 - [docs/STATUS.md](docs/STATUS.md) — what’s done and what still needs to happen
 - [docs/DECISIONS.md](docs/DECISIONS.md) — OpenCode plugin vs from-scratch, languages, license
+- [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md) — third-party license audit for commercial use
 
 ## License
 
