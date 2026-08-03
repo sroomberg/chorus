@@ -61,6 +61,24 @@ bun run typecheck
 cargo test -p chorus-relay
 ```
 
+### Multi-agent local testing
+
+Run several isolated OpenCode servers on one machine (each with Chorus loaded) and drive share/join over the HTTP API:
+
+```sh
+# Requires `opencode` on PATH (https://opencode.ai/docs)
+bun run multi-agent -- setup --agents 3
+bun run multi-agent -- up --agents 3
+bun run multi-agent -- smoke          # health + chorus tools registered
+bun run multi-agent -- pair           # /chorus-share then /chorus-join
+bun run multi-agent -- down
+
+# Protocol-only stress (no OpenCode): N concurrent JoinClients
+bun run test:relay-stress
+```
+
+See `bun run multi-agent -- help` for ports/env (`OPENCODE_BASE_PORT`, `CHORUS_BASE_PORT`, `OPENCODE_BIN`).
+
 ## Configuration
 
 | Env var | Default | Description |

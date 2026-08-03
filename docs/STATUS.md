@@ -51,6 +51,10 @@ Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`
 17. Broader tests: roles/view-forbid, kick/close, chat/typing, plugin entry, tunnel.
 18. Native slash-command registration when [opencode#5305](https://github.com/sst/opencode/issues/5305) lands.
 
+## Local multi-agent harness
+
+`scripts/multi-agent.ts` (via `bun run multi-agent`) can spawn N isolated `opencode serve` instances with the Chorus plugin, then automate `/chorus-share` + `/chorus-join` through OpenCode’s `/session/:id/command` API. Also includes `relay-stress` for concurrent protocol joiners without OpenCode.
+
 ## Explicit non-goals (for now)
 
 - Rebuilding a full coding agent harness from scratch.
