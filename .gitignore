@@ -4,6 +4,7 @@ dist/
 coverage/
 playwright-report/
 test-results/
+target/
 *.env
 *.env.local
 .DS_Store

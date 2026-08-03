@@ -4,14 +4,15 @@ Snapshot as of 2026-08-03 (post `v0.1.6`). Tests/typecheck/build are green (33 t
 
 ## Current state
 
-Chorus is an **OpenCode↔OpenCode** LAN collaboration plugin:
+Chorus is an **OpenCode↔OpenCode** LAN collaboration stack:
 
-- Host: `/chorus-share` → Bun WebSocket relay + token
-- Joiner: `/chorus-join` → forwards prompts into the host session
+- Host: `/chorus-share` → spawns Rust `chorus-relay` + issues token via `/host`
+- Joiner: `/chorus-join` → connects to relay `/ws`, forwards prompts into the host session
 - Side channel: `/chorus-chat` + typing toasts
 - Optional S3/R2 backup of user events
 
 The browser companion (`packages/web`) was intentionally removed. Watching is toast-based, not a mirrored transcript.
+The in-process Bun relay has been replaced by `crates/chorus-relay`.
 
 Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`, `opencode-ensemble`, `opencode-relay`): those target **multi-agent / same-DB sync**. Chorus targets **multi-human** pair programming on one live AI session.
 

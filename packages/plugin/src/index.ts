@@ -1,4 +1,3 @@
-import { AccessManager } from "./access/index.js";
 import { RelayServer } from "./relay/index.js";
 import { JoinClient } from "./join/index.js";
 import type { BackupAdapter } from "./backup/index.js";
@@ -26,7 +25,6 @@ function installCommands(): void {
       const dest = join(destDir, file);
       if (!existsSync(dest)) {
         copyFileSync(join(srcDir, file), dest);
-
       }
     }
   } catch {
@@ -58,9 +56,8 @@ function buildBackupAdapter(): BackupAdapter | null {
 // OpenCode plugin entry point
 //
 // API: https://github.com/sst/opencode — @opencode-ai/plugin v1.15.11
-// Plugin receives a single PluginInput and returns a Hooks object.
-// Tools are registered via hooks.tool as { [name]: { description, args, execute } }
-// where args is a Zod raw shape (NOT JSON Schema).
+// The WebSocket relay is the Rust `chorus-relay` binary; this plugin spawns it
+// and speaks the host control protocol on `/host`.
 // ──────────────────────────────────────────────────────────────────────────────
 
 interface PluginInput {
@@ -97,8 +94,7 @@ interface ToolContext {
 export default async function chorusPlugin(input: PluginInput) {
   installCommands();
 
-  const access = new AccessManager();
-  const relay = new RelayServer(access, DEFAULT_PORT);
+  const relay = new RelayServer(DEFAULT_PORT);
   const backup = buildBackupAdapter();
 
   let sessionId = "";
@@ -107,23 +103,30 @@ export default async function chorusPlugin(input: PluginInput) {
 
   let joinClient: JoinClient | null = null;
 
-  function toast(message: string, variant: "info" | "success" | "warning" | "error" = "info", duration = 4000): void {
+  function toast(
+    message: string,
+    variant: "info" | "success" | "warning" | "error" = "info",
+    duration = 4000
+  ): void {
     input.client.tui.showToast({ body: { message, variant, duration } }).catch(() => {});
   }
 
   function say(sid: string, text: string): void {
     input.client.session
-      .prompt({ throwOnError: false, path: { id: sid }, body: { noReply: true, parts: [{ type: "text", text }] } })
+      .prompt({
+        throwOnError: false,
+        path: { id: sid },
+        body: { noReply: true, parts: [{ type: "text", text }] },
+      })
       .catch(() => {});
   }
 
   // Track when we're injecting a collab message so chat.message hook can skip pushing it as an event
   let pendingCollabInject = false;
 
-  relay.setInputHandler(async (content, userId) => {
+  relay.setInputHandler(async (content, userId, displayName) => {
     if (!sessionId) return;
-    const user = access.getUser(userId);
-    const label = user?.displayName ?? userId.slice(0, 8);
+    const label = displayName ?? userId.slice(0, 8);
     pendingCollabInject = true;
     try {
       await input.client.session.prompt({
@@ -234,13 +237,13 @@ export default async function chorusPlugin(input: PluginInput) {
           const sid = sessionId || context.sessionID;
 
           if (!sharing) {
+            await relay.start();
             sharing = true;
-            relay.start();
             say(sid, `chorus relay started on port ${DEFAULT_PORT}`);
           }
 
           const ip = getLanIp();
-          const token = access.issueToken(sid, grantedRole);
+          const token = await relay.issueToken(sid, grantedRole);
           const info: ShareInfo & { role: string } = {
             token: token.token,
             sessionId: sid,
@@ -308,7 +311,6 @@ export default async function chorusPlugin(input: PluginInput) {
             if (event.type === "user") {
               toast(`[Host]: ${payload}`);
             } else if (event.type === "assistant") {
-              // AI responses can be long — show a truncated preview toast
               const preview = payload.length > 120 ? `${payload.slice(0, 117)}…` : payload;
               toast(`[AI]: ${preview}`);
             }
