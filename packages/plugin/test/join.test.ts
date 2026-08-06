@@ -1,19 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { JoinClient } from "../src/join/index.js";
 import { RelayServer } from "../src/relay/index.js";
-import { AccessManager } from "../src/access/index.js";
-import { encodeMessage } from "@chorus/shared";
 
 const TEST_PORT = 17743;
 
-describe("JoinClient", () => {
-  let access: AccessManager;
+describe("JoinClient (via Rust relay)", () => {
   let relay: RelayServer;
 
-  beforeEach(() => {
-    access = new AccessManager();
-    relay = new RelayServer(access, TEST_PORT);
-    relay.start();
+  beforeEach(async () => {
+    relay = new RelayServer(TEST_PORT);
+    await relay.start();
   });
 
   afterEach(() => {
@@ -26,7 +22,7 @@ describe("JoinClient", () => {
   });
 
   it("connects successfully with a valid token", async () => {
-    const token = access.issueToken("sess-1", "edit").token;
+    const token = (await relay.issueToken("sess-1", "edit")).token;
     const jc = new JoinClient(`ws://localhost:${TEST_PORT}/ws`, token, "Alice");
     await jc.connect();
     expect(jc.getState().status).toBe("connected");
@@ -42,7 +38,7 @@ describe("JoinClient", () => {
       timestamp: Date.now(),
     });
 
-    const token = access.issueToken("sess-1", "view").token;
+    const token = (await relay.issueToken("sess-1", "view")).token;
     const jc = new JoinClient(`ws://localhost:${TEST_PORT}/ws`, token, "Bob");
     await jc.connect();
     expect(jc.getState().recentEvents).toHaveLength(1);
@@ -50,7 +46,7 @@ describe("JoinClient", () => {
   });
 
   it("fires event handler for new events after connect", async () => {
-    const token = access.issueToken("sess-1", "edit").token;
+    const token = (await relay.issueToken("sess-1", "edit")).token;
     const jc = new JoinClient(`ws://localhost:${TEST_PORT}/ws`, token, "Carol");
     await jc.connect();
 
@@ -65,13 +61,13 @@ describe("JoinClient", () => {
       timestamp: Date.now(),
     });
 
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 80));
     expect(received).toContain("e-new");
     jc.disconnect();
   });
 
   it("disconnect sets status to disconnected", async () => {
-    const token = access.issueToken("sess-1", "admin").token;
+    const token = (await relay.issueToken("sess-1", "admin")).token;
     const jc = new JoinClient(`ws://localhost:${TEST_PORT}/ws`, token, "Host");
     await jc.connect();
     jc.disconnect();
@@ -85,14 +81,16 @@ describe("JoinClient", () => {
 
   it("can send collab input when connected as edit role", async () => {
     const received: string[] = [];
-    relay.setInputHandler(async (content) => { received.push(content); });
+    relay.setInputHandler(async (content) => {
+      received.push(content);
+    });
 
-    const token = access.issueToken("sess-1", "edit").token;
+    const token = (await relay.issueToken("sess-1", "edit")).token;
     const jc = new JoinClient(`ws://localhost:${TEST_PORT}/ws`, token, "Dev");
     await jc.connect();
 
     jc.sendInput("refactor this function");
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 80));
     expect(received).toContain("refactor this function");
     jc.disconnect();
   });
