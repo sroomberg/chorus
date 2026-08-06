@@ -1,34 +1,115 @@
-import type { SessionEvent, ChatMessage } from "@chorus/shared";
-import {
-  encodeMessage,
-  decodeClientMessage,
-  type ServerMessage,
-  type ClientMessage,
-} from "@chorus/shared";
-import type { AccessManager } from "../access/index.js";
+import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
+import type { SessionEvent, SessionToken, UserRole } from "@chorus/shared";
+import {
+  encodeHostMessage,
+  decodeRelayToHost,
+  type HostToRelay,
+  type RelayToHost,
+} from "@chorus/shared";
 
-interface Client {
-  userId: string;
-  ws: WebSocket;
+function resolveRelayBin(): string {
+  if (process.env["CHORUS_RELAY_BIN"]) return process.env["CHORUS_RELAY_BIN"];
+
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, "../../../../target/release/chorus-relay"),
+    join(here, "../../../../target/debug/chorus-relay"),
+    join(here, "../../../../../target/release/chorus-relay"),
+    join(here, "../../../../../target/debug/chorus-relay"),
+  ];
+  for (const path of candidates) {
+    if (existsSync(path)) return path;
+  }
+  return "chorus-relay";
 }
 
+export type RelayServerOptions = {
+  /** Host running the relay (default 127.0.0.1). */
+  host?: string;
+  /** When set with external mode, attach instead of spawning. */
+  hostToken?: string;
+  /**
+   * Attach to an already-running relay (e.g. on the Docker host).
+   * When true, requires hostToken and does not spawn/kill a subprocess.
+   */
+  external?: boolean;
+};
+
+function parseRelayHost(raw: string | undefined, fallbackPort: number): { host: string; port: number } {
+  if (!raw) return { host: "127.0.0.1", port: fallbackPort };
+  // Accept host, host:port, or ws(s)://host:port[/path]
+  const trimmed = raw.replace(/^wss?:\/\//, "").replace(/\/.*$/, "");
+  const [hostPart, portPart] = trimmed.split(":");
+  const port = portPart ? parseInt(portPart, 10) : fallbackPort;
+  return { host: hostPart || "127.0.0.1", port: Number.isFinite(port) ? port : fallbackPort };
+}
+
+/**
+ * Resolve relay connection settings from env.
+ *
+ * External attach (relay already running elsewhere):
+ *   CHORUS_RELAY_HOST=host.docker.internal:7742
+ *   CHORUS_HOST_TOKEN=<shared secret>
+ *   CHORUS_EXTERNAL_RELAY=1   (optional; implied when HOST_TOKEN is set)
+ */
+export function relayOptionsFromEnv(defaultPort: number): {
+  port: number;
+  opts: RelayServerOptions;
+} {
+  const parsed = parseRelayHost(process.env["CHORUS_RELAY_HOST"], defaultPort);
+  const hostToken = process.env["CHORUS_HOST_TOKEN"];
+  const external =
+    process.env["CHORUS_EXTERNAL_RELAY"] === "1" ||
+    process.env["CHORUS_EXTERNAL_RELAY"] === "true" ||
+    Boolean(hostToken && process.env["CHORUS_RELAY_HOST"]);
+
+  return {
+    port: parsed.port,
+    opts: {
+      host: parsed.host,
+      hostToken: hostToken || undefined,
+      external,
+    },
+  };
+}
+
+/**
+ * Manages the Rust `chorus-relay` subprocess and the host control WebSocket.
+ * Joiner-facing protocol on `/ws` is unchanged; the plugin talks to `/host`.
+ */
 export class RelayServer {
-  private clients = new Map<string, Client>();
-  private eventHistory: SessionEvent[] = [];
-  private chatHistory: ChatMessage[] = [];
-  private server: ReturnType<typeof Bun.serve> | null = null;
-  private inputQueue: Array<{ userId: string; content: string }> = [];
-  private onInjectInput?: (content: string, userId: string) => Promise<void>;
+  private child: ChildProcess | null = null;
+  private ws: WebSocket | null = null;
+  private hostToken = "";
+  private running = false;
+  private clients = 0;
+  private readonly host: string;
+  private readonly external: boolean;
+  private pendingToken: {
+    resolve: (t: SessionToken) => void;
+    reject: (e: Error) => void;
+  } | null = null;
+
+  private onInjectInput?: (content: string, userId: string, displayName?: string) => Promise<void>;
   private onChatMessage?: (displayName: string | undefined, content: string) => void;
   private onTyping?: (displayName: string | undefined) => void;
 
   constructor(
-    private readonly access: AccessManager,
-    private readonly port: number
-  ) {}
+    private readonly port: number,
+    opts: RelayServerOptions = {}
+  ) {
+    this.host = opts.host ?? "127.0.0.1";
+    this.external = Boolean(opts.external);
+    this.hostToken = opts.hostToken ?? "";
+  }
 
-  setInputHandler(fn: (content: string, userId: string) => Promise<void>): void {
+  setInputHandler(
+    fn: (content: string, userId: string, displayName?: string) => Promise<void>
+  ): void {
     this.onInjectInput = fn;
   }
 
@@ -40,245 +121,224 @@ export class RelayServer {
     this.onTyping = fn;
   }
 
-  sendChat(displayName: string | undefined, content: string): void {
-    const chatMsg: ChatMessage = {
-      id: randomBytes(8).toString("hex"),
-      sessionId: "",
-      userId: "host",
-      displayName,
-      content,
-      timestamp: Date.now(),
-    };
-    this.chatHistory.push(chatMsg);
-    this.broadcast({ type: "chat.message", message: chatMsg });
-    this.onChatMessage?.(displayName, content);
+  async start(): Promise<void> {
+    if (this.running) return;
+
+    if (this.external) {
+      if (!this.hostToken) {
+        throw new Error(
+          "External relay mode requires CHORUS_HOST_TOKEN (and usually CHORUS_RELAY_HOST)."
+        );
+      }
+      await this.waitForPort();
+      await this.connectHost();
+      this.running = true;
+      return;
+    }
+
+    this.hostToken = this.hostToken || randomBytes(32).toString("hex");
+    const bin = resolveRelayBin();
+
+    this.child = spawn(
+      bin,
+      ["--port", String(this.port), "--bind", "0.0.0.0", "--host-token", this.hostToken],
+      {
+        stdio: ["ignore", "ignore", "pipe"],
+        env: { ...process.env },
+      }
+    );
+
+    this.child.on("exit", () => {
+      this.running = false;
+      this.ws = null;
+    });
+
+    await this.waitForPort();
+    await this.connectHost();
+    this.running = true;
   }
 
-  start(): void {
-    const relay = this;
+  private statusUrl(): string {
+    return `http://${this.host}:${this.port}/status`;
+  }
 
-    this.server = Bun.serve({
-      port: this.port,
-      hostname: "0.0.0.0",
+  private hostWsUrl(): string {
+    return `ws://${this.host}:${this.port}/host`;
+  }
 
-      fetch(req, server) {
-        const url = new URL(req.url);
+  private async waitForPort(timeoutMs = 8000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        const res = await fetch(this.statusUrl(), { signal: AbortSignal.timeout(1000) });
+        if (res.ok) return;
+      } catch {
+        // not up yet
+      }
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    throw new Error(
+      this.external
+        ? `External chorus-relay not reachable at ${this.host}:${this.port}. Is it running on the host?`
+        : `chorus-relay did not become ready on port ${this.port}. ` +
+            `Is the binary available? (CHORUS_RELAY_BIN or cargo build -p chorus-relay --release)`
+    );
+  }
 
-        if (url.pathname === "/ws") {
-          const upgraded = server.upgrade(req, { data: {} });
-          if (upgraded) return undefined;
-          return new Response("WebSocket upgrade failed", { status: 400 });
+  private connectHost(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(this.hostWsUrl());
+      this.ws = ws;
+
+      const timer = setTimeout(() => reject(new Error("host control connect timeout")), 5000);
+
+      ws.onopen = () => {
+        this.send({ type: "host.auth", token: this.hostToken });
+      };
+
+      ws.onmessage = (ev) => {
+        let msg: RelayToHost;
+        try {
+          msg = decodeRelayToHost(String(ev.data));
+        } catch {
+          return;
         }
+        this.handleHostMessage(msg, () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      };
 
-        if (url.pathname === "/status") {
-          return new Response(
-            JSON.stringify({ status: "ok", clients: relay.clientCount }),
-            { headers: { "Content-Type": "application/json" } }
-          );
-        }
+      ws.onerror = () => {
+        clearTimeout(timer);
+        reject(new Error("host control WebSocket error"));
+      };
 
-        return new Response("chorus relay — OpenCode only", { status: 200 });
-      },
-
-      websocket: {
-        open(ws) {
-          // Unauthenticated until auth message received
-          ws.data = { userId: null };
-        },
-
-        message(ws, raw) {
-          let msg: ClientMessage;
-          try {
-            msg = decodeClientMessage(
-              typeof raw === "string" ? raw : new TextDecoder().decode(raw)
-            );
-          } catch {
-            ws.send(
-              encodeMessage({ type: "error", code: "BAD_MESSAGE", message: "Invalid JSON" })
-            );
-            return;
-          }
-
-          if (msg.type === "auth") {
-            const st = relay.access.validateToken(msg.token);
-            if (!st) {
-              ws.send(
-                encodeMessage({
-                  type: "error",
-                  code: "AUTH_FAILED",
-                  message: "Invalid or expired token",
-                })
-              );
-              ws.close(4001, "auth failed");
-              return;
-            }
-
-            const userId = randomBytes(8).toString("hex");
-            const user = relay.access.addUser(userId, st.grantedRole, msg.displayName);
-            (ws.data as Record<string, unknown>)["userId"] = userId;
-
-            relay.clients.set(userId, { userId, ws: ws as unknown as WebSocket });
-
-            // Send history and existing users (excluding self) to the new joiner.
-            // The subsequent user.joined broadcast adds the joiner to everyone's list.
-            ws.send(
-              encodeMessage({
-                type: "session.history",
-                events: relay.eventHistory,
-              })
-            );
-            ws.send(
-              encodeMessage({
-                type: "user.list",
-                users: relay.access.listUsers().filter((u) => u.userId !== userId),
-              })
-            );
-
-            // Notify everyone (including the joiner) of the new user
-            relay.broadcast({ type: "user.joined", user });
-            return;
-          }
-
-          const userId = (ws.data as Record<string, unknown>)["userId"] as string | undefined;
-          if (!userId) {
-            ws.send(
-              encodeMessage({ type: "error", code: "NOT_AUTHED", message: "Send auth first" })
-            );
-            return;
-          }
-
-          relay.handleClientMessage(userId, msg, ws as unknown as WebSocket);
-        },
-
-        close(ws) {
-          const userId = (ws.data as Record<string, unknown>)["userId"] as string | undefined;
-          if (userId) {
-            relay.access.removeUser(userId);
-            relay.clients.delete(userId);
-            relay.broadcast({ type: "user.left", userId });
-          }
-        },
-      },
+      ws.onclose = () => {
+        this.ws = null;
+        this.running = false;
+      };
     });
   }
 
-  private handleClientMessage(userId: string, msg: ClientMessage, ws: WebSocket): void {
+  private handleHostMessage(msg: RelayToHost, onReady?: () => void): void {
     switch (msg.type) {
-      case "typing": {
-        const user = this.access.getUser(userId);
-        // Broadcast to everyone except the sender
-        const encoded = encodeMessage({ type: "user.typing", userId, displayName: user?.displayName });
-        for (const [cid, client] of this.clients) {
-          if (cid !== userId) {
-            (client.ws as unknown as { send: (s: string) => void }).send(encoded);
-          }
-        }
-        this.onTyping?.(user?.displayName);
+      case "host.ready":
+        onReady?.();
+        break;
+
+      case "token.issued": {
+        const { type: _t, ...token } = msg;
+        this.pendingToken?.resolve(token);
+        this.pendingToken = null;
         break;
       }
 
-      case "chat.send": {
-        const user = this.access.getUser(userId);
-        const chatMsg: ChatMessage = {
-          id: randomBytes(8).toString("hex"),
-          sessionId: "",
-          userId,
-          displayName: user?.displayName,
-          content: msg.content,
-          timestamp: Date.now(),
-        };
-        this.chatHistory.push(chatMsg);
-        this.broadcast({ type: "chat.message", message: chatMsg });
-        this.onChatMessage?.(user?.displayName, msg.content);
+      case "collab.input":
+        this.onInjectInput?.(msg.content, msg.userId, msg.displayName)?.catch(console.error);
         break;
-      }
 
-      case "collab.input": {
-        if (!this.access.canSendInput(userId)) {
-          (ws as unknown as { send: (s: string) => void }).send(
-            encodeMessage({
-              type: "error",
-              code: "FORBIDDEN",
-              message: "Viewer cannot send LLM input",
-            })
-          );
-          return;
-        }
-        this.inputQueue.push({ userId, content: msg.content });
-        this.flushInputQueue();
+      case "chat.message":
+        this.onChatMessage?.(msg.message.displayName, msg.message.content);
         break;
-      }
 
-      case "host.promote": {
-        if (!this.access.isAdmin(userId)) return;
-        if (this.access.setRole(msg.userId, "edit")) {
-          this.broadcast({ type: "user.role_changed", userId: msg.userId, role: "edit" });
-        }
+      case "user.typing":
+        this.onTyping?.(msg.displayName);
         break;
-      }
 
-      case "host.demote": {
-        if (!this.access.isAdmin(userId)) return;
-        if (this.access.setRole(msg.userId, "view")) {
-          this.broadcast({ type: "user.role_changed", userId: msg.userId, role: "view" });
-        }
+      case "user.joined":
+        this.clients += 1;
         break;
-      }
 
-      case "host.kick": {
-        if (!this.access.isAdmin(userId)) return;
-        const target = this.clients.get(msg.userId);
-        if (target) {
-          (target.ws as unknown as { close: (code: number, reason: string) => void }).close(
-            4003,
-            "kicked by host"
-          );
-        }
+      case "user.left":
+        this.clients = Math.max(0, this.clients - 1);
         break;
-      }
 
-      case "host.close": {
-        if (!this.access.isAdmin(userId)) return;
-        this.broadcast({ type: "session.closed" });
-        this.stop();
+      case "user.list":
+        this.clients = msg.users.length;
         break;
-      }
+
+      case "status":
+        this.clients = msg.clients;
+        break;
+
+      case "error":
+        this.pendingToken?.reject(new Error(msg.message));
+        this.pendingToken = null;
+        break;
     }
   }
 
-  private flushInputQueue(): void {
-    if (!this.onInjectInput) return;
-    const next = this.inputQueue.shift();
-    if (!next) return;
-    this.onInjectInput(next.content, next.userId).catch(console.error);
+  private send(msg: HostToRelay): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(encodeHostMessage(msg));
   }
 
-  broadcast(msg: ServerMessage): void {
-    const encoded = encodeMessage(msg);
-    for (const client of this.clients.values()) {
-      (client.ws as unknown as { send: (s: string) => void }).send(encoded);
-    }
+  issueToken(sessionId: string, role: UserRole = "edit", ttlMs?: number): Promise<SessionToken> {
+    return new Promise((resolve, reject) => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        reject(new Error("relay host control not connected"));
+        return;
+      }
+      this.pendingToken = { resolve, reject };
+      this.send({ type: "token.issue", sessionId, role, ttlMs });
+      setTimeout(() => {
+        if (this.pendingToken) {
+          this.pendingToken.reject(new Error("token.issue timed out"));
+          this.pendingToken = null;
+        }
+      }, 5000);
+    });
   }
 
   pushEvent(event: SessionEvent): void {
-    this.eventHistory.push(event);
-    this.broadcast({ type: "session.event", event });
+    this.send({ type: "session.event", event });
+  }
+
+  sendChat(displayName: string | undefined, content: string): void {
+    this.send({ type: "chat.send", content, displayName });
   }
 
   stop(): void {
-    this.server?.stop();
-    this.server = null;
+    // Only tear down session state on relays we own. External relays stay up
+    // so container agents can reconnect across test runs.
+    if (!this.external) {
+      this.send({ type: "host.close" });
+    }
+    try {
+      this.ws?.close();
+    } catch {
+      // ignore
+    }
+    this.ws = null;
+    if (this.child && !this.child.killed) {
+      this.child.kill("SIGTERM");
+      setTimeout(() => {
+        if (this.child && !this.child.killed) this.child.kill("SIGKILL");
+      }, 1000).unref?.();
+    }
+    this.child = null;
+    this.running = false;
+    this.clients = 0;
   }
 
   get isRunning(): boolean {
-    return this.server !== null;
+    return this.running;
   }
 
   get clientCount(): number {
-    return this.clients.size;
+    return this.clients;
   }
 
   getPort(): number {
     return this.port;
+  }
+
+  getHost(): string {
+    return this.host;
+  }
+
+  isExternal(): boolean {
+    return this.external;
   }
 }

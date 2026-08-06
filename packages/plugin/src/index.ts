@@ -1,5 +1,4 @@
-import { AccessManager } from "./access/index.js";
-import { RelayServer } from "./relay/index.js";
+import { RelayServer, relayOptionsFromEnv } from "./relay/index.js";
 import { JoinClient } from "./join/index.js";
 import type { BackupAdapter } from "./backup/index.js";
 import { S3BackupAdapter } from "./backup/index.js";
@@ -12,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 const DEFAULT_PORT = parseInt(process.env["CHORUS_PORT"] ?? "7742", 10);
+const { port: RELAY_PORT, opts: RELAY_OPTS } = relayOptionsFromEnv(DEFAULT_PORT);
 
 // TODO: replace with native plugin slash command registration once supported
 // https://github.com/sst/opencode/issues/5305
@@ -26,7 +26,6 @@ function installCommands(): void {
       const dest = join(destDir, file);
       if (!existsSync(dest)) {
         copyFileSync(join(srcDir, file), dest);
-
       }
     }
   } catch {
@@ -44,6 +43,15 @@ function getLanIp(): string {
   return "localhost";
 }
 
+/** Host:port advertised to joiners (override with CHORUS_PUBLIC_HOST). */
+function publicJoinHost(port: number): string {
+  if (process.env["CHORUS_PUBLIC_HOST"]) return process.env["CHORUS_PUBLIC_HOST"];
+  if (RELAY_OPTS.external && RELAY_OPTS.host && RELAY_OPTS.host !== "127.0.0.1") {
+    return `${RELAY_OPTS.host}:${port}`;
+  }
+  return `${getLanIp()}:${port}`;
+}
+
 function buildBackupAdapter(): BackupAdapter | null {
   const bucket = process.env["CHORUS_AWS_BUCKET"];
   if (!bucket) return null;
@@ -58,9 +66,9 @@ function buildBackupAdapter(): BackupAdapter | null {
 // OpenCode plugin entry point
 //
 // API: https://github.com/sst/opencode — @opencode-ai/plugin v1.15.11
-// Plugin receives a single PluginInput and returns a Hooks object.
-// Tools are registered via hooks.tool as { [name]: { description, args, execute } }
-// where args is a Zod raw shape (NOT JSON Schema).
+// The WebSocket relay is the Rust `chorus-relay` binary. By default the plugin
+// spawns it; set CHORUS_RELAY_HOST + CHORUS_HOST_TOKEN to attach to a relay
+// already running on the host (typical for Docker agents).
 // ──────────────────────────────────────────────────────────────────────────────
 
 interface PluginInput {
@@ -97,8 +105,7 @@ interface ToolContext {
 export default async function chorusPlugin(input: PluginInput) {
   installCommands();
 
-  const access = new AccessManager();
-  const relay = new RelayServer(access, DEFAULT_PORT);
+  const relay = new RelayServer(RELAY_PORT, RELAY_OPTS);
   const backup = buildBackupAdapter();
 
   let sessionId = "";
@@ -107,23 +114,30 @@ export default async function chorusPlugin(input: PluginInput) {
 
   let joinClient: JoinClient | null = null;
 
-  function toast(message: string, variant: "info" | "success" | "warning" | "error" = "info", duration = 4000): void {
+  function toast(
+    message: string,
+    variant: "info" | "success" | "warning" | "error" = "info",
+    duration = 4000
+  ): void {
     input.client.tui.showToast({ body: { message, variant, duration } }).catch(() => {});
   }
 
   function say(sid: string, text: string): void {
     input.client.session
-      .prompt({ throwOnError: false, path: { id: sid }, body: { noReply: true, parts: [{ type: "text", text }] } })
+      .prompt({
+        throwOnError: false,
+        path: { id: sid },
+        body: { noReply: true, parts: [{ type: "text", text }] },
+      })
       .catch(() => {});
   }
 
   // Track when we're injecting a collab message so chat.message hook can skip pushing it as an event
   let pendingCollabInject = false;
 
-  relay.setInputHandler(async (content, userId) => {
+  relay.setInputHandler(async (content, userId, displayName) => {
     if (!sessionId) return;
-    const user = access.getUser(userId);
-    const label = user?.displayName ?? userId.slice(0, 8);
+    const label = displayName ?? userId.slice(0, 8);
     pendingCollabInject = true;
     try {
       await input.client.session.prompt({
@@ -234,22 +248,25 @@ export default async function chorusPlugin(input: PluginInput) {
           const sid = sessionId || context.sessionID;
 
           if (!sharing) {
+            await relay.start();
             sharing = true;
-            relay.start();
-            say(sid, `chorus relay started on port ${DEFAULT_PORT}`);
+            const where = relay.isExternal()
+              ? `attached to external relay ${relay.getHost()}:${relay.getPort()}`
+              : `chorus relay started on port ${relay.getPort()}`;
+            say(sid, where);
           }
 
-          const ip = getLanIp();
-          const token = access.issueToken(sid, grantedRole);
+          const joinHost = publicJoinHost(relay.getPort());
+          const token = await relay.issueToken(sid, grantedRole);
           const info: ShareInfo & { role: string } = {
             token: token.token,
             sessionId: sid,
-            port: DEFAULT_PORT,
-            url: `${ip}:${DEFAULT_PORT}`,
+            port: relay.getPort(),
+            url: joinHost,
             role: grantedRole,
           };
 
-          const joinCommand = `/chorus-join token="${token.token}" host="${ip}:${DEFAULT_PORT}"`;
+          const joinCommand = `/chorus-join token="${token.token}" host="${joinHost}"`;
           say(sid, `Send this command to your collaborator:\n${joinCommand}`);
 
           return JSON.stringify({
@@ -308,7 +325,6 @@ export default async function chorusPlugin(input: PluginInput) {
             if (event.type === "user") {
               toast(`[Host]: ${payload}`);
             } else if (event.type === "assistant") {
-              // AI responses can be long — show a truncated preview toast
               const preview = payload.length > 120 ? `${payload.slice(0, 117)}…` : payload;
               toast(`[AI]: ${preview}`);
             }
@@ -370,7 +386,13 @@ export default async function chorusPlugin(input: PluginInput) {
         args: {},
         async execute() {
           const shareInfo = sharing
-            ? { sharing: true, clients: relay.clientCount, port: DEFAULT_PORT }
+            ? {
+                sharing: true,
+                clients: relay.clientCount,
+                port: relay.getPort(),
+                host: relay.getHost(),
+                external: relay.isExternal(),
+              }
             : { sharing: false };
           const joinInfo = joinClient
             ? { joined: true, ...joinClient.getState() }

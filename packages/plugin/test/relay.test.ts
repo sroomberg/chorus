@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { RelayServer } from "../src/relay/index.js";
-import { AccessManager } from "../src/access/index.js";
 import type { ServerMessage } from "@chorus/shared";
 import { encodeMessage, decodeServerMessage } from "@chorus/shared";
 
@@ -28,10 +27,7 @@ async function connectWs(
   return { ws, messages, close: () => ws.close() };
 }
 
-async function waitFor<T>(
-  fn: () => T | undefined,
-  timeoutMs = 2000
-): Promise<T> {
+async function waitFor<T>(fn: () => T | undefined, timeoutMs = 3000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const v = fn();
@@ -41,14 +37,12 @@ async function waitFor<T>(
   throw new Error("waitFor timed out");
 }
 
-describe("RelayServer", () => {
-  let access: AccessManager;
+describe("RelayServer (Rust)", () => {
   let relay: RelayServer;
 
-  beforeEach(() => {
-    access = new AccessManager();
-    relay = new RelayServer(access, TEST_PORT);
-    relay.start();
+  beforeEach(async () => {
+    relay = new RelayServer(TEST_PORT);
+    await relay.start();
   });
 
   afterEach(() => {
@@ -65,12 +59,10 @@ describe("RelayServer", () => {
   });
 
   it("accepts a valid token and sends history + user list", async () => {
-    const token = access.issueToken("sess-1").token;
+    const token = (await relay.issueToken("sess-1")).token;
     const { messages, close } = await connectWs(token, "Alice");
 
-    await waitFor(() =>
-      messages.find((m) => m.type === "user.list") ? true : undefined
-    );
+    await waitFor(() => (messages.find((m) => m.type === "user.list") ? true : undefined));
 
     expect(messages.some((m) => m.type === "session.history")).toBe(true);
     expect(messages.some((m) => m.type === "user.list")).toBe(true);
@@ -78,18 +70,13 @@ describe("RelayServer", () => {
   });
 
   it("broadcasts session events to all connected clients", async () => {
-    const t1 = access.issueToken("sess-1").token;
-    const t2 = access.issueToken("sess-1").token;
+    const t1 = (await relay.issueToken("sess-1")).token;
+    const t2 = (await relay.issueToken("sess-1")).token;
     const c1 = await connectWs(t1);
     const c2 = await connectWs(t2);
 
-    // Wait for both to be fully joined
-    await waitFor(() =>
-      c1.messages.find((m) => m.type === "user.list") ? true : undefined
-    );
-    await waitFor(() =>
-      c2.messages.find((m) => m.type === "user.list") ? true : undefined
-    );
+    await waitFor(() => (c1.messages.find((m) => m.type === "user.list") ? true : undefined));
+    await waitFor(() => (c2.messages.find((m) => m.type === "user.list") ? true : undefined));
 
     relay.pushEvent({
       id: "e1",
@@ -119,18 +106,10 @@ describe("RelayServer", () => {
       received.push(content);
     });
 
-    const token = access.issueToken("sess-1").token;
+    const token = (await relay.issueToken("sess-1", "edit")).token;
     const { ws, messages, close } = await connectWs(token);
 
-    // Wait for user.list so we know auth completed
-    await waitFor(() =>
-      messages.find((m) => m.type === "user.list") ? true : undefined
-    );
-
-    // First joiner is host; promote to collaborator to test input
-    const userId = access.listUsers()[0]?.userId;
-    expect(userId).toBeTruthy();
-    access.setRole(userId!, "edit");
+    await waitFor(() => (messages.find((m) => m.type === "user.list") ? true : undefined));
 
     ws.send(encodeMessage({ type: "collab.input", content: "refactor this" }));
     await waitFor(() => (received.length > 0 ? true : undefined));

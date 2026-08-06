@@ -6,7 +6,7 @@
 |---|---|
 | Build from scratch as a new harness? | **No.** |
 | OpenCode plugin vs another host? | **Stay OpenCode-first** for v1; design the wire protocol as harness-agnostic. |
-| Primary language? | **TypeScript / Bun** for plugin + protocol SDKs. Optional Rust later for a standalone relay (fits `unified-context-protocol`). |
+| Primary language? | **TypeScript / Bun** for the OpenCode plugin + protocol SDKs; **Rust** for the session relay binary. |
 | License? | **Keep MIT** for protocol, shared types, and adapters. Managed cloud relay/backup (if any) stays proprietary SaaS — do not BSL/AGPL the client. |
 
 ---
@@ -47,8 +47,8 @@ Recommended shape:
  (plugin)    adapter     adapter
 ```
 
-- **v1:** OpenCode adapter = this repo’s plugin + local Bun relay
-- **v1.x:** extract `@chorus/protocol` (already largely `packages/shared`) as the stable contract
+- **v1:** OpenCode adapter = this repo’s plugin + local **Rust** `chorus-relay`
+- **v1.x:** keep `@chorus/shared` as the stable joiner + host-control contract
 - **v2:** optional second adapter (Codex app-server is the best #2) only after OpenCode UX is solid
 
 **Do not** make Claude Code / Amp the primary host — large audiences, but proprietary control planes. Treat them as distribution adapters later, not the core.
@@ -59,13 +59,13 @@ Recommended shape:
 
 | Layer | Language | Why |
 |---|---|---|
-| OpenCode plugin, shared protocol, tools | **TypeScript (Bun)** | Matches OpenCode plugin API; already implemented; fastest iteration |
-| Optional future high-perf relay / PTY mux | **Rust** (later) | Aligns with your `unified-context-protocol` Rust core; good for NAT/tunnel/binary deploy |
+| OpenCode plugin, shared protocol, tools | **TypeScript (Bun)** | Matches OpenCode plugin API; fastest iteration for tools/hooks |
+| Session relay (`crates/chorus-relay`) | **Rust** | Standalone binary; clean host/joiner split; ready for tunnels/NAT later; aligns with UCP |
 | Viewer TUI (if revived outside OpenCode) | TS or Go | Only if non-OpenCode observers become a goal |
 | Python | **Avoid as primary** | Fine for experiments; weak for realtime collab infra |
 
-**Now:** keep Bun + TypeScript monorepo.  
-**Later:** only introduce Rust if the relay outgrows in-process Bun or you want a single static binary for remote tunnels. UCP remains a separate concern (cross-model context), not a Chorus dependency for v1.
+**Now:** Bun/TS plugin spawns `chorus-relay` and speaks the `/host` control protocol; joiners still use `/ws`.  
+UCP remains a separate concern (cross-model context), not a Chorus dependency for v1.
 
 ---
 
@@ -89,7 +89,19 @@ No license change is required to continue v1. Prefer stability over a relicensin
 
 ---
 
-## 4. Product framing going forward
+## 4. Monorepo packaging
+
+| Choice | Decision |
+|---|---|
+| Repo shape | **Single monorepo** — plugin and relay share a wire protocol; splitting repos would amplify drift. |
+| Top-level dirs | `packages/*` (Bun) + `crates/*` (Cargo) + `protocol/` (fixtures). |
+| Task runner | Root `package.json` scripts only. No Turbo/Nx — two TS packages do not need a graph cache. |
+| Protocol SoT | `protocol/fixtures.json` is the shared contract; TS and Rust types stay hand-written until codegen is worth it. |
+| Ship units | npm: `@chorus/plugin` (+ `@chorus/shared`); binary: `chorus-relay` via releases / `cargo install`. Same repo, different artifacts. |
+
+---
+
+## 5. Product framing going forward
 
 Ship Chorus as:
 

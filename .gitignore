@@ -1,9 +1,10 @@
 node_modules/
 dist/
-.turbo/
 coverage/
 playwright-report/
 test-results/
+target/
+.multi-agent/
 *.env
 *.env.local
 .DS_Store

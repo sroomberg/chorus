@@ -1,0 +1,15 @@
+node_modules
+target
+.git
+.multi-agent
+.multi-agent-test
+coverage
+playwright-report
+test-results
+**/*.test.ts
+**/test
+docs
+*.md
+!packages/plugin/commands/*.md
+.env
+.env.*
