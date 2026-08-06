@@ -1,0 +1,72 @@
+# Chorus multi-agent test stack.
+#
+# Architecture:
+#   Host machine  → chorus-relay :7742  (started by `bun scripts/docker-agents.ts relay-up`)
+#   Containers    → OpenCode agents on published ports 4100+
+#                   reach the host relay via host.docker.internal
+#
+# Usage:
+#   bun run build
+#   bun scripts/docker-agents.ts up --agents 2
+#   bun scripts/docker-agents.ts pair
+#   bun scripts/docker-agents.ts down
+
+name: chorus-agents
+
+services:
+  agent-0:
+    build:
+      context: .
+      dockerfile: docker/opencode-agent/Dockerfile
+      args:
+        OPENCODE_VERSION: ${OPENCODE_VERSION:-1.18.11}
+    image: chorus-opencode-agent:local
+    container_name: chorus-agent-0
+    environment:
+      AGENT_NAME: agent-0
+      AGENT_ROLE: host
+      OPENCODE_PORT: "4096"
+      CHORUS_RELAY_HOST: host.docker.internal:${CHORUS_PORT:-7742}
+      CHORUS_PUBLIC_HOST: host.docker.internal:${CHORUS_PORT:-7742}
+      CHORUS_HOST_TOKEN: ${CHORUS_HOST_TOKEN:-}
+      CHORUS_EXTERNAL_RELAY: "1"
+    ports:
+      - "${OPENCODE_BASE_PORT:-4100}:4096"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: "no"
+
+  agent-1:
+    image: chorus-opencode-agent:local
+    container_name: chorus-agent-1
+    depends_on:
+      - agent-0
+    environment:
+      AGENT_NAME: agent-1
+      AGENT_ROLE: joiner
+      OPENCODE_PORT: "4096"
+      CHORUS_RELAY_HOST: host.docker.internal:${CHORUS_PORT:-7742}
+      CHORUS_PUBLIC_HOST: host.docker.internal:${CHORUS_PORT:-7742}
+    ports:
+      - "${OPENCODE_BASE_PORT_1:-4101}:4096"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: "no"
+
+  agent-2:
+    image: chorus-opencode-agent:local
+    container_name: chorus-agent-2
+    profiles: ["three"]
+    depends_on:
+      - agent-0
+    environment:
+      AGENT_NAME: agent-2
+      AGENT_ROLE: joiner
+      OPENCODE_PORT: "4096"
+      CHORUS_RELAY_HOST: host.docker.internal:${CHORUS_PORT:-7742}
+      CHORUS_PUBLIC_HOST: host.docker.internal:${CHORUS_PORT:-7742}
+    ports:
+      - "${OPENCODE_BASE_PORT_2:-4102}:4096"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: "no"

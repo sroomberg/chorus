@@ -1,0 +1,138 @@
+{
+  "serverMessages": [
+    {
+      "type": "session.event",
+      "event": {
+        "id": "evt-1",
+        "sessionId": "sess-abc",
+        "type": "message.created",
+        "payload": { "text": "hello" },
+        "timestamp": 1000
+      }
+    },
+    {
+      "type": "session.history",
+      "events": [
+        {
+          "id": "evt-1",
+          "sessionId": "sess-abc",
+          "type": "message.created",
+          "payload": { "text": "hello" },
+          "timestamp": 1000
+        }
+      ]
+    },
+    { "type": "session.closed" },
+    {
+      "type": "chat.message",
+      "message": {
+        "id": "chat-1",
+        "sessionId": "sess-abc",
+        "userId": "u1",
+        "displayName": "Alice",
+        "content": "hi",
+        "timestamp": 1001
+      }
+    },
+    {
+      "type": "user.joined",
+      "user": {
+        "userId": "u2",
+        "role": "edit",
+        "joinedAt": 1002,
+        "displayName": "Bob"
+      }
+    },
+    { "type": "user.left", "userId": "u2" },
+    { "type": "user.role_changed", "userId": "u2", "role": "view" },
+    {
+      "type": "user.list",
+      "users": [
+        { "userId": "u1", "role": "admin", "joinedAt": 1000 },
+        { "userId": "u2", "role": "view", "joinedAt": 1001 }
+      ]
+    },
+    { "type": "user.typing", "userId": "u2", "displayName": "Bob" },
+    { "type": "error", "code": "forbidden", "message": "viewers cannot prompt" }
+  ],
+  "clientMessages": [
+    { "type": "auth", "token": "abc123", "displayName": "Alice" },
+    { "type": "chat.send", "content": "hello chat" },
+    { "type": "typing" },
+    { "type": "collab.input", "content": "fix the bug" },
+    { "type": "host.promote", "userId": "u2" },
+    { "type": "host.demote", "userId": "u2" },
+    { "type": "host.kick", "userId": "u2" },
+    { "type": "host.close" }
+  ],
+  "hostToRelay": [
+    { "type": "host.auth", "token": "host-secret" },
+    {
+      "type": "token.issue",
+      "sessionId": "sess-abc",
+      "role": "edit",
+      "ttlMs": 3600000
+    },
+    {
+      "type": "session.event",
+      "event": {
+        "id": "evt-1",
+        "sessionId": "sess-abc",
+        "type": "message.created",
+        "payload": { "text": "hello" },
+        "timestamp": 1000
+      }
+    },
+    { "type": "chat.send", "content": "from host", "displayName": "Host" },
+    { "type": "host.promote", "userId": "u2" },
+    { "type": "host.demote", "userId": "u2" },
+    { "type": "host.kick", "userId": "u2" },
+    { "type": "host.close" },
+    { "type": "status.get" }
+  ],
+  "relayToHost": [
+    { "type": "host.ready", "port": 7742 },
+    {
+      "type": "token.issued",
+      "token": "join-token",
+      "sessionId": "sess-abc",
+      "createdAt": 1000,
+      "expiresAt": 4600000,
+      "grantedRole": "edit"
+    },
+    {
+      "type": "collab.input",
+      "userId": "u2",
+      "displayName": "Bob",
+      "content": "refactor this"
+    },
+    {
+      "type": "chat.message",
+      "message": {
+        "id": "chat-1",
+        "sessionId": "sess-abc",
+        "userId": "u2",
+        "displayName": "Bob",
+        "content": "hi",
+        "timestamp": 1001
+      }
+    },
+    { "type": "user.typing", "userId": "u2", "displayName": "Bob" },
+    {
+      "type": "user.joined",
+      "user": {
+        "userId": "u2",
+        "role": "edit",
+        "joinedAt": 1002,
+        "displayName": "Bob"
+      }
+    },
+    { "type": "user.left", "userId": "u2" },
+    {
+      "type": "user.list",
+      "users": [{ "userId": "u1", "role": "admin", "joinedAt": 1000 }]
+    },
+    { "type": "status", "clients": 2, "running": true },
+    { "type": "error", "code": "unauthorized", "message": "bad host token" }
+  ]
+}

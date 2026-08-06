@@ -27,6 +27,56 @@ function resolveRelayBin(): string {
   return "chorus-relay";
 }
 
+export type RelayServerOptions = {
+  /** Host running the relay (default 127.0.0.1). */
+  host?: string;
+  /** When set with external mode, attach instead of spawning. */
+  hostToken?: string;
+  /**
+   * Attach to an already-running relay (e.g. on the Docker host).
+   * When true, requires hostToken and does not spawn/kill a subprocess.
+   */
+  external?: boolean;
+};
+
+function parseRelayHost(raw: string | undefined, fallbackPort: number): { host: string; port: number } {
+  if (!raw) return { host: "127.0.0.1", port: fallbackPort };
+  // Accept host, host:port, or ws(s)://host:port[/path]
+  const trimmed = raw.replace(/^wss?:\/\//, "").replace(/\/.*$/, "");
+  const [hostPart, portPart] = trimmed.split(":");
+  const port = portPart ? parseInt(portPart, 10) : fallbackPort;
+  return { host: hostPart || "127.0.0.1", port: Number.isFinite(port) ? port : fallbackPort };
+}
+
+/**
+ * Resolve relay connection settings from env.
+ *
+ * External attach (relay already running elsewhere):
+ *   CHORUS_RELAY_HOST=host.docker.internal:7742
+ *   CHORUS_HOST_TOKEN=<shared secret>
+ *   CHORUS_EXTERNAL_RELAY=1   (optional; implied when HOST_TOKEN is set)
+ */
+export function relayOptionsFromEnv(defaultPort: number): {
+  port: number;
+  opts: RelayServerOptions;
+} {
+  const parsed = parseRelayHost(process.env["CHORUS_RELAY_HOST"], defaultPort);
+  const hostToken = process.env["CHORUS_HOST_TOKEN"];
+  const external =
+    process.env["CHORUS_EXTERNAL_RELAY"] === "1" ||
+    process.env["CHORUS_EXTERNAL_RELAY"] === "true" ||
+    Boolean(hostToken && process.env["CHORUS_RELAY_HOST"]);
+
+  return {
+    port: parsed.port,
+    opts: {
+      host: parsed.host,
+      hostToken: hostToken || undefined,
+      external,
+    },
+  };
+}
+
 /**
  * Manages the Rust `chorus-relay` subprocess and the host control WebSocket.
  * Joiner-facing protocol on `/ws` is unchanged; the plugin talks to `/host`.
@@ -37,6 +87,8 @@ export class RelayServer {
   private hostToken = "";
   private running = false;
   private clients = 0;
+  private readonly host: string;
+  private readonly external: boolean;
   private pendingToken: {
     resolve: (t: SessionToken) => void;
     reject: (e: Error) => void;
@@ -46,7 +98,14 @@ export class RelayServer {
   private onChatMessage?: (displayName: string | undefined, content: string) => void;
   private onTyping?: (displayName: string | undefined) => void;
 
-  constructor(private readonly port: number) {}
+  constructor(
+    private readonly port: number,
+    opts: RelayServerOptions = {}
+  ) {
+    this.host = opts.host ?? "127.0.0.1";
+    this.external = Boolean(opts.external);
+    this.hostToken = opts.hostToken ?? "";
+  }
 
   setInputHandler(
     fn: (content: string, userId: string, displayName?: string) => Promise<void>
@@ -65,7 +124,19 @@ export class RelayServer {
   async start(): Promise<void> {
     if (this.running) return;
 
-    this.hostToken = randomBytes(32).toString("hex");
+    if (this.external) {
+      if (!this.hostToken) {
+        throw new Error(
+          "External relay mode requires CHORUS_HOST_TOKEN (and usually CHORUS_RELAY_HOST)."
+        );
+      }
+      await this.waitForPort();
+      await this.connectHost();
+      this.running = true;
+      return;
+    }
+
+    this.hostToken = this.hostToken || randomBytes(32).toString("hex");
     const bin = resolveRelayBin();
 
     this.child = spawn(
@@ -87,11 +158,19 @@ export class RelayServer {
     this.running = true;
   }
 
-  private async waitForPort(timeoutMs = 5000): Promise<void> {
+  private statusUrl(): string {
+    return `http://${this.host}:${this.port}/status`;
+  }
+
+  private hostWsUrl(): string {
+    return `ws://${this.host}:${this.port}/host`;
+  }
+
+  private async waitForPort(timeoutMs = 8000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       try {
-        const res = await fetch(`http://127.0.0.1:${this.port}/status`);
+        const res = await fetch(this.statusUrl(), { signal: AbortSignal.timeout(1000) });
         if (res.ok) return;
       } catch {
         // not up yet
@@ -99,14 +178,16 @@ export class RelayServer {
       await new Promise((r) => setTimeout(r, 40));
     }
     throw new Error(
-      `chorus-relay did not become ready on port ${this.port}. ` +
-        `Is the binary available? (CHORUS_RELAY_BIN or cargo build -p chorus-relay --release)`
+      this.external
+        ? `External chorus-relay not reachable at ${this.host}:${this.port}. Is it running on the host?`
+        : `chorus-relay did not become ready on port ${this.port}. ` +
+            `Is the binary available? (CHORUS_RELAY_BIN or cargo build -p chorus-relay --release)`
     );
   }
 
   private connectHost(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`ws://127.0.0.1:${this.port}/host`);
+      const ws = new WebSocket(this.hostWsUrl());
       this.ws = ws;
 
       const timer = setTimeout(() => reject(new Error("host control connect timeout")), 5000);
@@ -219,7 +300,11 @@ export class RelayServer {
   }
 
   stop(): void {
-    this.send({ type: "host.close" });
+    // Only tear down session state on relays we own. External relays stay up
+    // so container agents can reconnect across test runs.
+    if (!this.external) {
+      this.send({ type: "host.close" });
+    }
     try {
       this.ws?.close();
     } catch {
@@ -228,7 +313,6 @@ export class RelayServer {
     this.ws = null;
     if (this.child && !this.child.killed) {
       this.child.kill("SIGTERM");
-      // Escalate if it hangs
       setTimeout(() => {
         if (this.child && !this.child.killed) this.child.kill("SIGKILL");
       }, 1000).unref?.();
@@ -248,5 +332,13 @@ export class RelayServer {
 
   getPort(): number {
     return this.port;
+  }
+
+  getHost(): string {
+    return this.host;
+  }
+
+  isExternal(): boolean {
+    return this.external;
   }
 }

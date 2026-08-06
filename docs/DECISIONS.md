@@ -89,7 +89,19 @@ No license change is required to continue v1. Prefer stability over a relicensin
 
 ---
 
-## 4. Product framing going forward
+## 4. Monorepo packaging
+
+| Choice | Decision |
+|---|---|
+| Repo shape | **Single monorepo** — plugin and relay share a wire protocol; splitting repos would amplify drift. |
+| Top-level dirs | `packages/*` (Bun) + `crates/*` (Cargo) + `protocol/` (fixtures). |
+| Task runner | Root `package.json` scripts only. No Turbo/Nx — two TS packages do not need a graph cache. |
+| Protocol SoT | `protocol/fixtures.json` is the shared contract; TS and Rust types stay hand-written until codegen is worth it. |
+| Ship units | npm: `@chorus/plugin` (+ `@chorus/shared`); binary: `chorus-relay` via releases / `cargo install`. Same repo, different artifacts. |
+
+---
+
+## 5. Product framing going forward
 
 Ship Chorus as:
 
