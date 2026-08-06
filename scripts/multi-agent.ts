@@ -150,12 +150,12 @@ async function ensureBuilt(): Promise<void> {
     if (r.exitCode !== 0) throw new Error("cargo build failed");
   }
   console.log("→ building TypeScript packages…");
-  const t = Bun.spawnSync(["bun", "x", "turbo", "run", "build"], {
+  const t = Bun.spawnSync(["bun", "run", "build:ts"], {
     cwd: REPO_ROOT,
     stdout: "inherit",
     stderr: "inherit",
   });
-  if (t.exitCode !== 0) throw new Error("turbo build failed");
+  if (t.exitCode !== 0) throw new Error("build:ts failed");
 }
 
 function setupAgentWorkspace(i: number): void {

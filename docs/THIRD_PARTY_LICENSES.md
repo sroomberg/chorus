@@ -62,7 +62,7 @@ Reachable runtime packages (~60), all permissive:
 | OpenCode host app | MIT | Not redistributed by Chorus |
 | Bun (if you ship or require it) | MIT, but **statically links JavaScriptCore (LGPL-2)** | See “Bun” below |
 
-Dev-only (vitest, turbo, typescript, types): permissive; do not ship in customer artifacts.
+Dev-only (vitest, typescript, types): permissive; do not ship in customer artifacts.
 
 ---
 

@@ -39,7 +39,7 @@ jobs:
       - name: TypeScript / Bun tests
         env:
           CHORUS_RELAY_BIN: ${{ github.workspace }}/target/release/chorus-relay
-        run: bunx turbo run test
+        run: bun run test:ts
 
       - name: Build TypeScript packages
-        run: bunx turbo run build
+        run: bun run build:ts

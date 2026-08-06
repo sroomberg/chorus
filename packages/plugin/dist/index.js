@@ -1,4 +1,4 @@
-import { RelayServer } from "./relay/index.js";
+import { RelayServer, relayOptionsFromEnv } from "./relay/index.js";
 import { JoinClient } from "./join/index.js";
 import { S3BackupAdapter } from "./backup/index.js";
 import { networkInterfaces } from "node:os";
@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 const DEFAULT_PORT = parseInt(process.env["CHORUS_PORT"] ?? "7742", 10);
+const { port: RELAY_PORT, opts: RELAY_OPTS } = relayOptionsFromEnv(DEFAULT_PORT);
 // TODO: replace with native plugin slash command registration once supported
 // https://github.com/sst/opencode/issues/5305
 function installCommands() {
@@ -39,6 +40,15 @@ function getLanIp() {
     }
     return "localhost";
 }
+/** Host:port advertised to joiners (override with CHORUS_PUBLIC_HOST). */
+function publicJoinHost(port) {
+    if (process.env["CHORUS_PUBLIC_HOST"])
+        return process.env["CHORUS_PUBLIC_HOST"];
+    if (RELAY_OPTS.external && RELAY_OPTS.host && RELAY_OPTS.host !== "127.0.0.1") {
+        return `${RELAY_OPTS.host}:${port}`;
+    }
+    return `${getLanIp()}:${port}`;
+}
 function buildBackupAdapter() {
     const bucket = process.env["CHORUS_AWS_BUCKET"];
     if (!bucket)
@@ -51,7 +61,7 @@ function buildBackupAdapter() {
 }
 export default async function chorusPlugin(input) {
     installCommands();
-    const relay = new RelayServer(DEFAULT_PORT);
+    const relay = new RelayServer(RELAY_PORT, RELAY_OPTS);
     const backup = buildBackupAdapter();
     let sessionId = "";
     let sharing = false;
@@ -168,18 +178,21 @@ export default async function chorusPlugin(input) {
                     if (!sharing) {
                         await relay.start();
                         sharing = true;
-                        say(sid, `chorus relay started on port ${DEFAULT_PORT}`);
+                        const where = relay.isExternal()
+                            ? `attached to external relay ${relay.getHost()}:${relay.getPort()}`
+                            : `chorus relay started on port ${relay.getPort()}`;
+                        say(sid, where);
                     }
-                    const ip = getLanIp();
+                    const joinHost = publicJoinHost(relay.getPort());
                     const token = await relay.issueToken(sid, grantedRole);
                     const info = {
                         token: token.token,
                         sessionId: sid,
-                        port: DEFAULT_PORT,
-                        url: `${ip}:${DEFAULT_PORT}`,
+                        port: relay.getPort(),
+                        url: joinHost,
                         role: grantedRole,
                     };
-                    const joinCommand = `/chorus-join token="${token.token}" host="${ip}:${DEFAULT_PORT}"`;
+                    const joinCommand = `/chorus-join token="${token.token}" host="${joinHost}"`;
                     say(sid, `Send this command to your collaborator:\n${joinCommand}`);
                     return JSON.stringify({
                         ...info,
@@ -285,7 +298,13 @@ export default async function chorusPlugin(input) {
                 args: {},
                 async execute() {
                     const shareInfo = sharing
-                        ? { sharing: true, clients: relay.clientCount, port: DEFAULT_PORT }
+                        ? {
+                            sharing: true,
+                            clients: relay.clientCount,
+                            port: relay.getPort(),
+                            host: relay.getHost(),
+                            external: relay.isExternal(),
+                        }
                         : { sharing: false };
                     const joinInfo = joinClient
                         ? { joined: true, ...joinClient.getState() }

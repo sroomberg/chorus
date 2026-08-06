@@ -43,20 +43,25 @@ Then add to OpenCode config:
 }
 ```
 
-## Packages / crates
+## Layout
 
-| Path | Description |
-|---|---|
-| `packages/plugin` | OpenCode plugin — tools, hooks, spawns/manages relay |
-| `packages/shared` | Shared TypeScript types (joiner + host-control protocols) |
-| `crates/chorus-relay` | Rust WebSocket relay (`/ws` joiners, `/host` control plane) |
+One monorepo, two ecosystems, one wire contract:
+
+| Path | Artifact | Description |
+|---|---|---|
+| `packages/plugin` | npm `@chorus/plugin` | OpenCode plugin — tools, hooks, spawns/manages relay |
+| `packages/shared` | npm `@chorus/shared` | TypeScript types + codecs for joiner and host-control protocols |
+| `crates/chorus-relay` | `chorus-relay` binary | Rust WebSocket relay (`/ws` joiners, `/host` control plane) |
+| `protocol/` | fixtures (not published) | Canonical JSON examples both TS and Rust must deserialize |
+
+Root `package.json` scripts are the only task entry (`build`, `test`, `typecheck`). Bun workspaces own `packages/*`; Cargo owns `crates/*`.
 
 ## Development
 
 ```sh
 bun install
 bun run build          # release relay + TS packages
-bun run test           # relay tests + TS/Bun tests
+bun run test           # relay tests + TS/Bun tests (includes protocol fixtures)
 bun run typecheck
 cargo test -p chorus-relay
 ```
@@ -79,6 +84,20 @@ bun run test:relay-stress
 
 See `bun run multi-agent -- help` for ports/env (`OPENCODE_BASE_PORT`, `CHORUS_BASE_PORT`, `OPENCODE_BIN`).
 
+### Docker agents + host relay
+
+Run `chorus-relay` on your machine and OpenCode agents in containers (different published ports). Containers reach the relay via `host.docker.internal`.
+
+```sh
+bun run build                         # release relay + plugin dist (needed for image)
+bun run docker-agents -- up --agents 2
+bun run docker-agents -- smoke
+bun run docker-agents -- pair         # /chorus-share then /chorus-join across containers
+bun run docker-agents -- down
+```
+
+`up` starts the host relay on `0.0.0.0:7742`, builds `chorus-opencode-agent:local`, and publishes agents on `4100+`. Override with `CHORUS_PORT`, `OPENCODE_BASE_PORT`, `CHORUS_HOST_TOKEN`, `OPENCODE_VERSION`.
+
 ## Configuration
 
 | Env var | Default | Description |
@@ -86,6 +105,9 @@ See `bun run multi-agent -- help` for ports/env (`OPENCODE_BASE_PORT`, `CHORUS_B
 | `CHORUS_PORT` | `7742` | Relay listen port |
 | `CHORUS_RELAY_BIN` | auto-detect | Path to `chorus-relay` binary |
 | `CHORUS_HOST_TOKEN` | random | Host control secret (set by plugin when spawning) |
+| `CHORUS_RELAY_HOST` | `127.0.0.1` | Relay host to attach to (e.g. `host.docker.internal:7742`) |
+| `CHORUS_PUBLIC_HOST` | local IP:port | Host:port advertised in `/chorus-share` join URLs |
+| `CHORUS_EXTERNAL_RELAY` | — | `1` to attach to an existing relay (no spawn/kill) |
 | `CHORUS_AWS_BUCKET` | — | S3/R2 bucket for session backup |
 | `CHORUS_AWS_REGION` | `us-east-1` | AWS region |
 | `CHORUS_AWS_ENDPOINT` | — | Custom endpoint (for R2/MinIO) |
