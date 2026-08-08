@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Joiner mirrors host prompts and AI replies into its OpenCode session transcript (`[Host]:` / `[AI]:`), including history replay on join (replaces toast-only viewing)
+- Fix: prevent host/joiner feedback loop when the same agent both shares and joins (block join while sharing; never mirror while hosting; drop echoed `[AI]/`/`[Host]:` collab lines)
 - Replace in-process Bun WebSocket relay with Rust `chorus-relay` binary (`crates/chorus-relay`)
 - Host control protocol on `/host` (token issue, session events, chat, collab.input fan-in)
 - Joiner protocol on `/ws` unchanged

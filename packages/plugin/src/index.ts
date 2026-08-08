@@ -113,6 +113,18 @@ export default async function chorusPlugin(input: PluginInput) {
   const events: SessionEvent[] = [];
 
   let joinClient: JoinClient | null = null;
+  /** Joiner OpenCode session that should mirror the host transcript. */
+  let joinSessionId = "";
+  /**
+   * True while we inject a remote host/AI event into the joiner session so
+   * chat.message does not forward that text back over collab.input.
+   */
+  let pendingRemoteInject = false;
+  /** Serialize joiner transcript mirrors (history replay + live events). */
+  let mirrorChain: Promise<void> = Promise.resolve();
+  /** Event ids already written into the joiner transcript (dedupe live vs history). */
+  const mirroredEventIds = new Set<string>();
+  const MIRROR_LINE = /^\[(AI|Host)\]:/;
 
   function toast(
     message: string,
@@ -132,11 +144,64 @@ export default async function chorusPlugin(input: PluginInput) {
       .catch(() => {});
   }
 
+  function formatMirroredEvent(event: SessionEvent): string | null {
+    const payload =
+      typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload);
+    if (event.type === "user") return `[Host]: ${payload}`;
+    if (event.type === "assistant") return `[AI]: ${payload}`;
+    return null;
+  }
+
+  function rememberMirrored(id: string): void {
+    mirroredEventIds.add(id);
+    if (mirroredEventIds.size > 400) {
+      const first = mirroredEventIds.values().next().value;
+      if (first !== undefined) mirroredEventIds.delete(first);
+    }
+  }
+
+  /**
+   * Inject a host session event into the joiner OpenCode transcript (no LLM).
+   * Never run this while sharing — that creates a feedback loop where the host
+   * mirrors its own AI replies back into itself.
+   */
+  function mirrorEventToJoiner(event: SessionEvent): void {
+    if (sharing) return;
+    if (!joinSessionId || !joinClient) return;
+    if (mirroredEventIds.has(event.id)) return;
+
+    const text = formatMirroredEvent(event);
+    if (!text) return;
+
+    rememberMirrored(event.id);
+    mirrorChain = mirrorChain
+      .then(async () => {
+        if (!joinSessionId || sharing) return;
+        pendingRemoteInject = true;
+        try {
+          await input.client.session.prompt({
+            throwOnError: false,
+            path: { id: joinSessionId },
+            body: {
+              noReply: true,
+              parts: [{ type: "text", text, synthetic: true }],
+            },
+          });
+        } finally {
+          pendingRemoteInject = false;
+        }
+      })
+      .catch(() => {});
+  }
+
   // Track when we're injecting a collab message so chat.message hook can skip pushing it as an event
   let pendingCollabInject = false;
 
   relay.setInputHandler(async (content, userId, displayName) => {
     if (!sessionId) return;
+    // Joiner echoed a mirrored transcript line — drop it (do not re-prompt the host LLM).
+    if (MIRROR_LINE.test(content.trim())) return;
+
     const label = displayName ?? userId.slice(0, 8);
     pendingCollabInject = true;
     try {
@@ -164,15 +229,19 @@ export default async function chorusPlugin(input: PluginInput) {
       output: { parts: Array<{ type: string; text?: string; synthetic?: boolean }> }
     ) => {
       sessionId = chatInput.sessionID;
+      if (joinClient) joinSessionId = chatInput.sessionID;
 
       if (joinClient) {
         const state = joinClient.getState();
         if (state.status === "connected") {
-          const text = output.parts
-            .filter((p) => p.type === "text" && !p.synthetic)
-            .map((p) => p.text ?? "")
-            .join("\n");
-          if (text) joinClient.sendInput(text);
+          // Mirrored host/AI lines are synthetic / pendingRemoteInject — do not echo back.
+          if (!pendingRemoteInject) {
+            const text = output.parts
+              .filter((p) => p.type === "text" && !p.synthetic)
+              .map((p) => p.text ?? "")
+              .join("\n");
+            if (text && !MIRROR_LINE.test(text.trim())) joinClient.sendInput(text);
+          }
         }
       }
 
@@ -183,8 +252,8 @@ export default async function chorusPlugin(input: PluginInput) {
         .map((p) => p.text ?? "")
         .join("\n");
 
-      // Skip collab-injected and synthetic messages — they're already visible in both sessions
-      if (!text || pendingCollabInject) return;
+      // Skip collab-injected, synthetic, and mirrored transcript lines
+      if (!text || pendingCollabInject || MIRROR_LINE.test(text.trim())) return;
 
       const event: SessionEvent = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -247,6 +316,14 @@ export default async function chorusPlugin(input: PluginInput) {
 
           const sid = sessionId || context.sessionID;
 
+          // Hosting + joining on the same plugin instance mirrors events into itself.
+          if (joinClient) {
+            joinClient.disconnect();
+            joinClient = null;
+            joinSessionId = "";
+            mirroredEventIds.clear();
+          }
+
           if (!sharing) {
             await relay.start();
             sharing = true;
@@ -291,18 +368,30 @@ export default async function chorusPlugin(input: PluginInput) {
             .optional()
             .describe("Your display name in the session (defaults to system username)."),
         },
-        async execute(args: { token: string; host: string; name?: string }) {
+        async execute(args: { token: string; host: string; name?: string }, context: ToolContext) {
+          if (sharing) {
+            return JSON.stringify({
+              joined: false,
+              error:
+                "This session is currently sharing. Run chorus-stop before chorus-join — " +
+                "hosting and joining on the same agent creates an event feedback loop.",
+            });
+          }
+
           if (joinClient) {
             joinClient.disconnect();
             joinClient = null;
           }
 
+          joinSessionId = context.sessionID;
+          mirroredEventIds.clear();
           const displayName = args.name ?? process.env["USER"] ?? "unknown";
           const jc = new JoinClient(`ws://${args.host}/ws`, args.token, displayName);
 
           try {
             await jc.connect();
           } catch (err) {
+            joinSessionId = "";
             return JSON.stringify({
               joined: false,
               error: err instanceof Error ? err.message : String(err),
@@ -317,18 +406,15 @@ export default async function chorusPlugin(input: PluginInput) {
             toast(`✏️ [${typingDisplayName ?? "someone"}] is typing…`, "info", 2000);
           });
 
+          // Live host transcript → joiner session (not toasts).
           jc.setEventHandler((event) => {
-            const payload =
-              typeof event.payload === "string"
-                ? event.payload
-                : JSON.stringify(event.payload);
-            if (event.type === "user") {
-              toast(`[Host]: ${payload}`);
-            } else if (event.type === "assistant") {
-              const preview = payload.length > 120 ? `${payload.slice(0, 117)}…` : payload;
-              toast(`[AI]: ${preview}`);
-            }
+            mirrorEventToJoiner(event);
           });
+
+          // Replay buffered history from auth so late joiners catch up.
+          for (const event of jc.getState().recentEvents) {
+            mirrorEventToJoiner(event);
+          }
 
           joinClient = jc;
           const state = jc.getState();
@@ -337,8 +423,8 @@ export default async function chorusPlugin(input: PluginInput) {
             users: state.users,
             recentEventCount: state.recentEvents.length,
             message:
-              "Connected. Your messages will now be forwarded to the shared session. " +
-              "Run chorus-leave to disconnect.",
+              "Connected. Host prompts and AI replies will appear in this session. " +
+              "Your messages are forwarded to the shared session. Run chorus-leave to disconnect.",
           });
         },
       },
@@ -351,6 +437,8 @@ export default async function chorusPlugin(input: PluginInput) {
             return JSON.stringify({ left: false, message: "Not currently joined to any session." });
           joinClient.disconnect();
           joinClient = null;
+          joinSessionId = "";
+          mirroredEventIds.clear();
           return JSON.stringify({ left: true });
         },
       },
@@ -414,6 +502,9 @@ export default async function chorusPlugin(input: PluginInput) {
 
     dispose: async () => {
       joinClient?.disconnect();
+      joinClient = null;
+      joinSessionId = "";
+      mirroredEventIds.clear();
       relay.stop();
     },
   };
