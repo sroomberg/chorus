@@ -78,7 +78,7 @@ export default function chorusPlugin(input: PluginInput): Promise<{
                 token: string;
                 host: string;
                 name?: string;
-            }): Promise<string>;
+            }, context: ToolContext): Promise<string>;
         };
         "chorus-leave": {
             description: string;

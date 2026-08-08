@@ -11,7 +11,7 @@ Chorus is an **OpenCode↔OpenCode** LAN collaboration stack:
 - Side channel: `/chorus-chat` + typing toasts
 - Optional S3/R2 backup of user events
 
-The browser companion (`packages/web`) was intentionally removed. Watching is toast-based, not a mirrored transcript.
+The browser companion (`packages/web`) was intentionally removed. Joiners now mirror the host transcript into their OpenCode session (`[Host]:` / `[AI]:` lines via `noReply` inject); side-channel chat/typing remain toasts.
 The in-process Bun relay has been replaced by `crates/chorus-relay`.
 
 Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`, `opencode-ensemble`, `opencode-relay`): those target **multi-agent / same-DB sync**. Chorus targets **multi-human** pair programming on one live AI session.
@@ -27,8 +27,8 @@ Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`
 
 ### P0 — collaboration correctness
 
-5. **Joiner dual-session bug**: joiner prompts still hit the *local* LLM *and* the host → sessions diverge. Need suppress/noReply, or a read-only joiner mode that only forwards.
-6. **True session viewing**: AI is only a ~120-char toast preview. Observers need a mirrored transcript (or reintroduced thin viewer).
+5. **Joiner dual-session bug**: joiner prompts still hit the *local* LLM *and* the host → sessions diverge. Need suppress/noReply on the joiner turn, or a read-only joiner mode that only forwards.
+6. ~~**True session viewing**~~: host prompts + AI replies are injected into the joiner OpenCode transcript (`[Host]:` / `[AI]:`, history replayed on join). Still labeled user-lines (OpenCode has no plugin API for true assistant turns); chat/typing stay toasts. Guard: same agent cannot share and join (that mirrored AI replies back into the host and looped).
 7. **Host moderation tools**: protocol has `host.promote|demote|kick|close`, but the host is not a WS client, so those controls are unreachable. Add `chorus-promote` / `chorus-kick` (etc.) as host-side tools.
 
 ### P1 — remote use & security
