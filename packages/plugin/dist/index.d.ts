@@ -16,6 +16,15 @@ interface PluginInput {
                     }>;
                 };
             }): Promise<unknown>;
+            /** Cancel in-flight local generation (used so joiners don't run a divergent LLM). */
+            abort?(opts: {
+                path: {
+                    id: string;
+                };
+                query?: {
+                    directory?: string;
+                };
+            }): Promise<unknown>;
         };
         tui: {
             showToast(opts?: {
@@ -24,6 +33,23 @@ interface PluginInput {
                     message: string;
                     variant: "info" | "success" | "warning" | "error";
                     duration?: number;
+                };
+                query?: {
+                    directory?: string;
+                };
+            }): Promise<unknown>;
+            /** Navigate attached TUI to a session (helps surface externally injected lines). */
+            selectSession?(opts?: {
+                body?: {
+                    sessionID: string;
+                };
+                query?: {
+                    directory?: string;
+                };
+            }): Promise<unknown>;
+            executeCommand?(opts?: {
+                body?: {
+                    command: string;
                 };
                 query?: {
                     directory?: string;

@@ -78,7 +78,10 @@ export default async function chorusPlugin(input) {
     let mirrorChain = Promise.resolve();
     /** Event ids already written into the joiner transcript (dedupe live vs history). */
     const mirroredEventIds = new Set();
+    /** Texts this joiner recently forwarded — skip mirroring our own labeled echo. */
+    const recentlyForwarded = new Set();
     const MIRROR_LINE = /^\[(AI|Host)\]:/;
+    const LABELED_LINE = /^\[[^\]]+\]:\s/;
     function toast(message, variant = "info", duration = 4000) {
         input.client.tui.showToast({ body: { message, variant, duration } }).catch(() => { });
     }
@@ -93,8 +96,12 @@ export default async function chorusPlugin(input) {
     }
     function formatMirroredEvent(event) {
         const payload = typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload);
-        if (event.type === "user")
+        if (event.type === "user") {
+            // Collaborator lines are already `[name]: …` from the host — keep for all agents.
+            if (LABELED_LINE.test(payload))
+                return payload;
             return `[Host]: ${payload}`;
+        }
         if (event.type === "assistant")
             return `[AI]: ${payload}`;
         return null;
@@ -107,10 +114,41 @@ export default async function chorusPlugin(input) {
                 mirroredEventIds.delete(first);
         }
     }
+    function noteForwarded(text) {
+        recentlyForwarded.add(text);
+        setTimeout(() => recentlyForwarded.delete(text), 30_000).unref?.();
+    }
+    function isOwnForwardEcho(payload) {
+        for (const text of recentlyForwarded) {
+            if (payload === text || payload.endsWith(`: ${text}`))
+                return true;
+        }
+        return false;
+    }
+    async function abortLocalTurn(sid) {
+        if (!input.client.session.abort)
+            return;
+        // chat.message runs before the agent loop is busy — brief delay then abort.
+        await new Promise((r) => setTimeout(r, 75));
+        await input.client.session.abort({ path: { id: sid } }).catch(() => { });
+    }
+    async function nudgeJoinerTui(sid, preview) {
+        toast(preview, "info", 3500);
+        if (input.client.tui.selectSession) {
+            await input.client.tui.selectSession({ body: { sessionID: sid } }).catch(() => { });
+        }
+        if (input.client.tui.executeCommand) {
+            await input.client.tui
+                .executeCommand({ body: { command: "session.last" } })
+                .catch(() => { });
+        }
+    }
     /**
-     * Inject a host session event into the joiner OpenCode transcript (no LLM).
-     * Never run this while sharing — that creates a feedback loop where the host
-     * mirrors its own AI replies back into itself.
+     * Inject a shared-session event into this joiner's OpenCode transcript (no LLM).
+     * Never run while sharing — that feedback-loops the host into itself.
+     *
+     * Prefer the web UI on the agent port for live view; attach TUI often misses
+     * injects (upstream). We still toast + nudge after each write.
      */
     function mirrorEventToJoiner(event) {
         if (sharing)
@@ -122,6 +160,10 @@ export default async function chorusPlugin(input) {
         const text = formatMirroredEvent(event);
         if (!text)
             return;
+        if (event.type === "user" && isOwnForwardEcho(text)) {
+            rememberMirrored(event.id);
+            return;
+        }
         rememberMirrored(event.id);
         mirrorChain = mirrorChain
             .then(async () => {
@@ -141,29 +183,43 @@ export default async function chorusPlugin(input) {
             finally {
                 pendingRemoteInject = false;
             }
+            const preview = text.length > 100 ? `${text.slice(0, 97)}…` : text;
+            await nudgeJoinerTui(joinSessionId, preview);
         })
             .catch(() => { });
     }
-    // Track when we're injecting a collab message so chat.message hook can skip pushing it as an event
+    // Track when we're injecting a collab message so chat.message can skip auto-push
     let pendingCollabInject = false;
     relay.setInputHandler(async (content, userId, displayName) => {
         if (!sessionId)
             return;
-        // Joiner echoed a mirrored transcript line — drop it (do not re-prompt the host LLM).
+        // Joiner echoed a mirrored transcript line — drop it.
         if (MIRROR_LINE.test(content.trim()))
             return;
         const label = displayName ?? userId.slice(0, 8);
+        const labeled = `[${label}]: ${content}`;
         pendingCollabInject = true;
         try {
             await input.client.session.prompt({
                 throwOnError: true,
                 path: { id: sessionId },
-                body: { parts: [{ type: "text", text: `[${label}]: ${content}` }] },
+                body: { parts: [{ type: "text", text: labeled }] },
             });
         }
         finally {
             pendingCollabInject = false;
         }
+        // Fan out collaborator prompts to every joiner (pendingCollabInject skips
+        // the chat.message auto-push, so publish explicitly).
+        const event = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            sessionId,
+            type: "user",
+            payload: labeled,
+            timestamp: Date.now(),
+        };
+        events.push(event);
+        relay.pushEvent(event);
     });
     relay.setChatHandler((displayName, content) => {
         toast(`💬 [${displayName ?? "guest"}]: ${content}`);
@@ -185,8 +241,12 @@ export default async function chorusPlugin(input) {
                             .filter((p) => p.type === "text" && !p.synthetic)
                             .map((p) => p.text ?? "")
                             .join("\n");
-                        if (text && !MIRROR_LINE.test(text.trim()))
+                        if (text && !MIRROR_LINE.test(text.trim())) {
+                            noteForwarded(text);
                             joinClient.sendInput(text);
+                            // One shared brain: cancel the joiner's local LLM; wait for mirrored host AI.
+                            void abortLocalTurn(chatInput.sessionID);
+                        }
                     }
                 }
             }
@@ -340,8 +400,10 @@ export default async function chorusPlugin(input) {
                         joined: true,
                         users: state.users,
                         recentEventCount: state.recentEvents.length,
-                        message: "Connected. Host prompts and AI replies will appear in this session. " +
-                            "Your messages are forwarded to the shared session. Run chorus-leave to disconnect.",
+                        message: "Connected. This agent mirrors the shared host transcript in real time " +
+                            "([Host]/ / [name]: / [AI]:). Your prompts go to the host session; local LLM is aborted. " +
+                            "For live UI updates prefer the web UI at this agent's port (attach TUI often lags). " +
+                            "Run chorus-leave to disconnect.",
                     });
                 },
             },

@@ -318,7 +318,12 @@ async function cmdUp(args: Args): Promise<void> {
     const role = i === 0 ? "host  " : "joiner";
     console.log(`  agent-${i}  ${role}  http://127.0.0.1:${base + i}`);
   }
-  console.log(`\nPair test:  bun scripts/docker-agents.ts pair`);
+  console.log(`\nLive UI (recommended for mirrored context):`);
+  for (let i = 0; i < args.agents; i++) {
+    console.log(`  open http://127.0.0.1:${base + i}`);
+  }
+  console.log(`\nOr attach TUI:  opencode attach http://127.0.0.1:${base}`);
+  console.log(`Pair test:  bun scripts/docker-agents.ts pair`);
   console.log(`Tear down:  bun scripts/docker-agents.ts down`);
 }
 

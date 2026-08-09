@@ -98,6 +98,13 @@ bun run docker-agents -- down
 
 `up` starts the host relay on `0.0.0.0:7742`, builds `chorus-opencode-agent:local`, and publishes agents on `4100+`. Override with `CHORUS_PORT`, `OPENCODE_BASE_PORT`, `CHORUS_HOST_TOKEN`, `OPENCODE_VERSION`.
 
+For live mirrored context on joiners, open the **web UI** (not only `opencode attach`):
+
+- Host: http://127.0.0.1:4100  
+- Joiner: http://127.0.0.1:4101  
+
+`opencode attach` works for driving the session, but OpenCode’s attach TUI often does not live-render plugin-injected transcript lines.
+
 ## Configuration
 
 | Env var | Default | Description |
