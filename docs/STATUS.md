@@ -27,8 +27,8 @@ Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`
 
 ### P0 — collaboration correctness
 
-5. **Joiner dual-session bug**: joiner prompts still hit the *local* LLM *and* the host → sessions diverge. Need suppress/noReply on the joiner turn, or a read-only joiner mode that only forwards.
-6. ~~**True session viewing**~~: host prompts + AI replies are injected into the joiner OpenCode transcript (`[Host]:` / `[AI]:`, history replayed on join). Still labeled user-lines (OpenCode has no plugin API for true assistant turns); chat/typing stay toasts. Guard: same agent cannot share and join (that mirrored AI replies back into the host and looped).
+5. **Joiner dual-session**: joiner prompts are forwarded to the host and the local joiner LLM turn is aborted; mirrored `[AI]:` from the host is the shared reply. Residual risk if `session.abort` races.
+6. **True session viewing**: host + all joiners receive the same event stream; joiners inject into their OpenCode transcript. **Live UI:** OpenCode web UI on the agent port updates; `opencode attach` TUI often does not (upstream). Toasts + TUI session nudge are best-effort for attach. Guard: same agent cannot share and join (that mirrored AI replies back into the host and looped).
 7. **Host moderation tools**: protocol has `host.promote|demote|kick|close`, but the host is not a WS client, so those controls are unreachable. Add `chorus-promote` / `chorus-kick` (etc.) as host-side tools.
 
 ### P1 — remote use & security
