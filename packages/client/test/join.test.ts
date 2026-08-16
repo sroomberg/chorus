@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { JoinClient } from "../src/join/index.js";
-import { RelayServer } from "../src/relay/index.js";
+import { JoinClient } from "../src/index.js";
+import { RelayServer } from "../src/index.js";
 
 const TEST_PORT = 17743;
 
