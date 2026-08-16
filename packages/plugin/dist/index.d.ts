@@ -152,7 +152,7 @@ export default function chorusPlugin(input: PluginInput): Promise<{
         "chorus-status": {
             description: string;
             args: {};
-            execute(): Promise<string>;
+            execute(_args: Record<string, never>, context: ToolContext): Promise<string>;
         };
         "chorus-stop": {
             description: string;

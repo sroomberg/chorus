@@ -45,6 +45,7 @@ Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`
 - Required display name on join (no anonymous / empty names)
 - Git origin binding when the host share directory has a remote (joiner must present matching remote)
 - `chorus-kick` for active joiners
+- Layered `chorus.json` config (org/user/project) for security + relay + backup defaults, with enterprise locks
 
 ### P1 — reliability
 

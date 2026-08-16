@@ -1,0 +1,19 @@
+{
+  "org": {
+    "name": "Example Engineering",
+    "policyNote": "Pair sessions require host approval and a matching git clone."
+  },
+  "security": {
+    "requireApproval": true,
+    "allowSkipApproval": false,
+    "requireRepoMatch": true,
+    "defaultRole": "edit",
+    "tokenTtlMs": 86400000
+  },
+  "relay": {
+    "port": 7742
+  },
+  "backup": {
+    "region": "us-east-1"
+  }
+}

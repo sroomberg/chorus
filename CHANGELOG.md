@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Config file support (`chorus.json` / `.chorus/config.json` / `~/.config/chorus/config.json` / `/etc/chorus/config.json`) with layered merge, enterprise security locks (`allowSkipApproval`, `requireRepoMatch`), and `/chorus-status` effective-config output
 - Security: host approval gate for joiners (`requireApproval` on share, default true; `chorus-approve` / `chorus-deny`)
 - Security: display name required on join (reject empty / whitespace)
 - Security: when the host share directory has a git `origin`, bind the session to that remote and reject joiners who are not in a matching clone (soft claim check, not provider ACL)
