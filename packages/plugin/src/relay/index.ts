@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
-import type { SessionEvent, SessionToken, UserRole } from "@chorus/shared";
+import type { ConnectedUser, SessionEvent, SessionToken, UserRole } from "@chorus/shared";
 import {
   encodeHostMessage,
   decodeRelayToHost,
@@ -97,6 +97,9 @@ export class RelayServer {
   private onInjectInput?: (content: string, userId: string, displayName?: string) => Promise<void>;
   private onChatMessage?: (displayName: string | undefined, content: string) => void;
   private onTyping?: (displayName: string | undefined) => void;
+  private onUserPending?: (user: ConnectedUser) => void;
+  private onUserJoined?: (user: ConnectedUser) => void;
+  private onUserLeft?: (userId: string) => void;
 
   constructor(
     private readonly port: number,
@@ -119,6 +122,18 @@ export class RelayServer {
 
   setTypingHandler(fn: (displayName: string | undefined) => void): void {
     this.onTyping = fn;
+  }
+
+  setUserPendingHandler(fn: (user: ConnectedUser) => void): void {
+    this.onUserPending = fn;
+  }
+
+  setUserJoinedHandler(fn: (user: ConnectedUser) => void): void {
+    this.onUserJoined = fn;
+  }
+
+  setUserLeftHandler(fn: (userId: string) => void): void {
+    this.onUserLeft = fn;
   }
 
   async start(): Promise<void> {
@@ -246,16 +261,22 @@ export class RelayServer {
         this.onTyping?.(msg.displayName);
         break;
 
+      case "user.pending":
+        this.onUserPending?.(msg.user);
+        break;
+
       case "user.joined":
         this.clients += 1;
+        this.onUserJoined?.(msg.user);
         break;
 
       case "user.left":
         this.clients = Math.max(0, this.clients - 1);
+        this.onUserLeft?.(msg.userId);
         break;
 
       case "user.list":
-        this.clients = msg.users.length;
+        this.clients = msg.users.filter((u) => u.status === "active").length;
         break;
 
       case "status":
@@ -289,6 +310,26 @@ export class RelayServer {
         }
       }, 5000);
     });
+  }
+
+  setSessionPolicy(opts: { requireApproval?: boolean; repoRemote?: string | null }): void {
+    this.send({
+      type: "session.policy",
+      requireApproval: opts.requireApproval,
+      repoRemote: opts.repoRemote === null ? "" : opts.repoRemote,
+    });
+  }
+
+  approveUser(userId: string): void {
+    this.send({ type: "host.approve", userId });
+  }
+
+  denyUser(userId: string): void {
+    this.send({ type: "host.deny", userId });
+  }
+
+  kickUser(userId: string): void {
+    this.send({ type: "host.kick", userId });
   }
 
   pushEvent(event: SessionEvent): void {

@@ -1,5 +1,8 @@
 export type UserRole = "admin" | "edit" | "view";
 
+/** Admission state: pending awaits host approve/deny; active may participate. */
+export type UserStatus = "pending" | "active";
+
 export interface SessionToken {
   token: string;
   sessionId: string;
@@ -12,7 +15,8 @@ export interface ConnectedUser {
   userId: string;
   role: UserRole;
   joinedAt: number;
-  displayName?: string;
+  displayName: string;
+  status: UserStatus;
 }
 
 export interface SessionEvent {
@@ -54,4 +58,11 @@ export interface ShareInfo {
   token: string;
   sessionId: string;
   port: number;
+}
+
+/** Session admission / binding policy set by the host plugin. */
+export interface SessionPolicy {
+  requireApproval: boolean;
+  /** Normalized or raw host git remote; absent/empty means no repo gate. */
+  repoRemote?: string;
 }

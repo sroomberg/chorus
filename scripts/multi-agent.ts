@@ -403,6 +403,9 @@ async function cmdSmoke(): Promise<void> {
     const needed = [
       "chorus-share",
       "chorus-join",
+      "chorus-approve",
+      "chorus-deny",
+      "chorus-kick",
       "chorus-leave",
       "chorus-chat",
       "chorus-status",
@@ -462,8 +465,13 @@ async function cmdPair(args: Args): Promise<void> {
     body: JSON.stringify({ title: "chorus-multi-agent-host" }),
   });
 
-  console.log(`→ /chorus-share ${args.role}`);
-  const share = await runCommand(host.url, hostSession.id, "chorus-share", args.role);
+  console.log(`→ /chorus-share ${args.role} requireApproval=false`);
+  const share = await runCommand(
+    host.url,
+    hostSession.id,
+    "chorus-share",
+    `${args.role} requireApproval=false`
+  );
   console.log(share.text || "(no text parts)");
   if (!share.text) console.log(JSON.stringify(share.raw, null, 2).slice(0, 800));
 

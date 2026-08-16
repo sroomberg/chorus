@@ -119,6 +119,16 @@ For live mirrored context on joiners, open the **web UI** (not only `opencode at
 | `CHORUS_AWS_REGION` | `us-east-1` | AWS region |
 | `CHORUS_AWS_ENDPOINT` | — | Custom endpoint (for R2/MinIO) |
 
+### Session access control
+
+| Control | Behavior |
+|---|---|
+| Join token | Still required; issued by `/chorus-share` with a role |
+| Display name | **Required** on `/chorus-join` — empty names are rejected |
+| Host approval | **On by default** (`requireApproval`); joiner stays pending with no transcript until `/chorus-approve` (or `/chorus-deny`) |
+| Git repo gate | If the host share directory has `origin`, joiners must present the same remote (SSH/HTTPS normalized). Not a GitHub/GitLab ACL proof — it only blocks joiners outside that clone |
+| Kick | `/chorus-kick <userId>` disconnects an active joiner |
+
 Remote tunneling (`bore` / `cloudflared`) is not implemented yet — share a LAN IP + port for now.
 
 ## Roadmap & decisions
