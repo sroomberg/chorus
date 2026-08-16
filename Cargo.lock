@@ -178,6 +178,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "chorus-zed-helper"
+version = "0.1.0"
+dependencies = [
+ "chorus-relay",
+ "clap",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite 0.26.2",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "clap"
 version = "4.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
