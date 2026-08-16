@@ -69,6 +69,9 @@ export class RelayServer {
     onInjectInput;
     onChatMessage;
     onTyping;
+    onUserPending;
+    onUserJoined;
+    onUserLeft;
     constructor(port, opts = {}) {
         this.port = port;
         this.host = opts.host ?? "127.0.0.1";
@@ -83,6 +86,15 @@ export class RelayServer {
     }
     setTypingHandler(fn) {
         this.onTyping = fn;
+    }
+    setUserPendingHandler(fn) {
+        this.onUserPending = fn;
+    }
+    setUserJoinedHandler(fn) {
+        this.onUserJoined = fn;
+    }
+    setUserLeftHandler(fn) {
+        this.onUserLeft = fn;
     }
     async start() {
         if (this.running)
@@ -185,14 +197,19 @@ export class RelayServer {
             case "user.typing":
                 this.onTyping?.(msg.displayName);
                 break;
+            case "user.pending":
+                this.onUserPending?.(msg.user);
+                break;
             case "user.joined":
                 this.clients += 1;
+                this.onUserJoined?.(msg.user);
                 break;
             case "user.left":
                 this.clients = Math.max(0, this.clients - 1);
+                this.onUserLeft?.(msg.userId);
                 break;
             case "user.list":
-                this.clients = msg.users.length;
+                this.clients = msg.users.filter((u) => u.status === "active").length;
                 break;
             case "status":
                 this.clients = msg.clients;
@@ -223,6 +240,22 @@ export class RelayServer {
                 }
             }, 5000);
         });
+    }
+    setSessionPolicy(opts) {
+        this.send({
+            type: "session.policy",
+            requireApproval: opts.requireApproval,
+            repoRemote: opts.repoRemote === null ? "" : opts.repoRemote,
+        });
+    }
+    approveUser(userId) {
+        this.send({ type: "host.approve", userId });
+    }
+    denyUser(userId) {
+        this.send({ type: "host.deny", userId });
+    }
+    kickUser(userId) {
+        this.send({ type: "host.kick", userId });
     }
     pushEvent(event) {
         this.send({ type: "session.event", event });
