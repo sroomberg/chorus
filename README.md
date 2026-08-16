@@ -107,9 +107,55 @@ For live mirrored context on joiners, open the **web UI** (not only `opencode at
 
 ## Configuration
 
+Chorus reads a layered **config file** plus environment variables.
+
+### Config file (`chorus.json`)
+
+Search order (later layers override earlier keys):
+
+1. Built-in defaults
+2. System / org: `/etc/chorus/config.json` (or `CHORUS_SYSTEM_CONFIG`)
+3. User: `~/.config/chorus/config.json`
+4. Project: `./chorus.json` or `./.chorus/config.json`
+5. Explicit file: `CHORUS_CONFIG=/path/to/config.json`
+6. Environment variables (ops overrides for port, public host, backup)
+
+Copy [chorus.example.json](./chorus.example.json) to get started. Example enterprise lock:
+
+```json
+{
+  "org": { "name": "Acme Engineering" },
+  "security": {
+    "requireApproval": true,
+    "allowSkipApproval": false,
+    "requireRepoMatch": true,
+    "defaultRole": "edit",
+    "tokenTtlMs": 86400000
+  }
+}
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `security.requireApproval` | `true` | Joiners pending until host approve/deny |
+| `security.allowSkipApproval` | `true` | If `false`, tool args cannot turn approval off |
+| `security.requireRepoMatch` | `false` | If `true`, share fails without a git `origin` |
+| `security.defaultRole` | `edit` | Role when `/chorus-share` omits role |
+| `security.tokenTtlMs` | — | Optional join-token TTL |
+| `relay.port` / `relay.publicHost` | — | Relay listen / advertised join host |
+| `backup.bucket` / `region` / `endpoint` | — | Optional S3/R2 backup |
+| `org.name` / `org.policyNote` | — | Shown in share + status |
+
+`/chorus-status` prints the effective config and which files contributed.
+
+### Environment variables
+
 | Env var | Default | Description |
 |---|---|---|
-| `CHORUS_PORT` | `7742` | Relay listen port |
+| `CHORUS_CONFIG` | — | Absolute path to a config JSON file (highest file layer) |
+| `CHORUS_SYSTEM_CONFIG` | `/etc/chorus/config.json` | Org-wide config path |
+| `CHORUS_USER_CONFIG` | `~/.config/chorus/config.json` | Per-user config path override |
+| `CHORUS_PORT` | `7742` | Relay listen port (overrides file) |
 | `CHORUS_RELAY_BIN` | auto-detect | Path to `chorus-relay` binary |
 | `CHORUS_HOST_TOKEN` | random | Host control secret (set by plugin when spawning) |
 | `CHORUS_RELAY_HOST` | `127.0.0.1` | Relay host to attach to (e.g. `host.docker.internal:7742`) |
@@ -125,8 +171,8 @@ For live mirrored context on joiners, open the **web UI** (not only `opencode at
 |---|---|
 | Join token | Still required; issued by `/chorus-share` with a role |
 | Display name | **Required** on `/chorus-join` — empty names are rejected |
-| Host approval | **On by default** (`requireApproval`); joiner stays pending with no transcript until `/chorus-approve` (or `/chorus-deny`) |
-| Git repo gate | If the host share directory has `origin`, joiners must present the same remote (SSH/HTTPS normalized). Not a GitHub/GitLab ACL proof — it only blocks joiners outside that clone |
+| Host approval | Config `security.requireApproval` (default on); joiner stays pending until `/chorus-approve` |
+| Git repo gate | If the host share directory has `origin` (or `requireRepoMatch`), joiners must present the same remote |
 | Kick | `/chorus-kick <userId>` disconnects an active joiner |
 
 Remote tunneling (`bore` / `cloudflared`) is not implemented yet — share a LAN IP + port for now.
