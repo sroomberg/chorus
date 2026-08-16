@@ -2,11 +2,13 @@
 
 ## Unreleased
 
+- Session access control: host approval before joiners go active, required display names, optional same-repo remote gate (`session.policy` / `auth.pending` / `host.approve|deny`)
 - VS Code extension (`packages/vscode`) — share/join/chat over the same relay protocol; Session sidebar + commands
+- Zed joiner extension (`packages/zed`) + `chorus-zed-helper` (MCP/CLI)
 - Extract `@chorus/client` (`JoinClient` + `RelayServer`) for reuse by OpenCode, VS Code, and future adapters
 - Real-time shared transcript for all agents: fan out collaborator prompts to every joiner, abort joiner local LLM, mirror `[Host]`/`[name]`/`[AI]` (prefer web UI for live view)
 - Joiner mirrors host prompts and AI replies into its OpenCode session transcript (`[Host]:` / `[AI]:`), including history replay on join (replaces toast-only viewing)
-- Fix: prevent host/joiner feedback loop when the same agent both shares and joins (block join while sharing; never mirror while hosting; drop echoed `[AI]/`/`[Host]:` collab lines)
+- Fix: prevent host/joiner feedback loop when the same agent both shares and joins (block join while sharing; never mirror while hosting; drop echoed `[AI]`/`[Host]:` collab lines)
 - Replace in-process Bun WebSocket relay with Rust `chorus-relay` binary (`crates/chorus-relay`)
 - Host control protocol on `/host` (token issue, session events, chat, collab.input fan-in)
 - Joiner protocol on `/ws` unchanged

@@ -11,11 +11,13 @@ export type ServerMessage =
   | { type: "user.role_changed"; userId: string; role: UserRole }
   | { type: "user.list"; users: ConnectedUser[] }
   | { type: "user.typing"; userId: string; displayName?: string }
+  | { type: "auth.pending"; userId: string; message?: string }
+  | { type: "auth.denied"; message: string }
   | { type: "error"; code: string; message: string };
 
 // Messages sent from client (browser) to server (plugin relay)
 export type ClientMessage =
-  | { type: "auth"; token: string; displayName?: string }
+  | { type: "auth"; token: string; displayName: string; repoRemote?: string }
   | { type: "chat.send"; content: string }
   | { type: "typing" }
   | { type: "collab.input"; content: string }
@@ -36,4 +38,13 @@ export function decodeServerMessage(raw: string): ServerMessage {
 export function decodeClientMessage(raw: string): ClientMessage {
   const parsed = JSON.parse(raw) as ClientMessage;
   return parsed;
+}
+
+/** Non-empty trimmed display name, or null if invalid. */
+export function normalizeDisplayName(raw: string | undefined | null): string | null {
+  if (raw == null) return null;
+  const name = raw.trim();
+  if (!name) return null;
+  if (name.length > 64) return name.slice(0, 64);
+  return name;
 }

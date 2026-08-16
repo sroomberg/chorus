@@ -44,15 +44,75 @@ export function activate(context) {
                 return;
             const name = await vscode.window.showInputBox({
                 title: "Display name",
-                prompt: "Optional — shown to collaborators",
+                prompt: "Required — shown to collaborators (cannot be empty)",
                 ignoreFocusOut: true,
+                value: vscode.workspace.getConfiguration("chorus").get("displayName") || "",
             });
+            if (name !== undefined && !name.trim()) {
+                void vscode.window.showErrorMessage("Display name is required.");
+                return;
+            }
             await controller.join(token.trim(), host.trim(), name?.trim() || undefined);
             output.show(true);
-            void vscode.window.showInformationMessage("Joined Chorus session");
+            const mode = controller.getMode();
+            void vscode.window.showInformationMessage(mode === "pending" ? "Connected — waiting for host approval" : "Joined Chorus session");
         }
         catch (err) {
             void vscode.window.showErrorMessage(`Chorus join failed: ${String(err)}`);
+        }
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("chorus.approve", async () => {
+        try {
+            const pending = controller.getPendingUsers();
+            if (!pending.length) {
+                const userId = await vscode.window.showInputBox({
+                    title: "Approve joiner",
+                    prompt: "Pending user id",
+                    ignoreFocusOut: true,
+                });
+                if (!userId)
+                    return;
+                controller.approveUser(userId.trim());
+                return;
+            }
+            const pick = await vscode.window.showQuickPick(pending.map((u) => ({
+                label: u.displayName,
+                description: `${u.role} · ${u.userId}`,
+                userId: u.userId,
+            })), { title: "Approve joiner" });
+            if (!pick)
+                return;
+            controller.approveUser(pick.userId);
+        }
+        catch (err) {
+            void vscode.window.showErrorMessage(String(err));
+        }
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("chorus.deny", async () => {
+        try {
+            const pending = controller.getPendingUsers();
+            if (!pending.length) {
+                const userId = await vscode.window.showInputBox({
+                    title: "Deny joiner",
+                    prompt: "Pending user id",
+                    ignoreFocusOut: true,
+                });
+                if (!userId)
+                    return;
+                controller.denyUser(userId.trim());
+                return;
+            }
+            const pick = await vscode.window.showQuickPick(pending.map((u) => ({
+                label: u.displayName,
+                description: `${u.role} · ${u.userId}`,
+                userId: u.userId,
+            })), { title: "Deny joiner" });
+            if (!pick)
+                return;
+            controller.denyUser(pick.userId);
+        }
+        catch (err) {
+            void vscode.window.showErrorMessage(String(err));
         }
     }));
     context.subscriptions.push(vscode.commands.registerCommand("chorus.leave", async () => {

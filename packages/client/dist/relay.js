@@ -13,6 +13,8 @@ function resolveRelayBin() {
         join(here, "../../../target/debug/chorus-relay"),
         join(here, "../../../../target/release/chorus-relay"),
         join(here, "../../../../target/debug/chorus-relay"),
+        join(here, "../../../../../target/release/chorus-relay"),
+        join(here, "../../../../../target/debug/chorus-relay"),
     ];
     for (const path of candidates) {
         if (existsSync(path))
@@ -23,6 +25,7 @@ function resolveRelayBin() {
 function parseRelayHost(raw, fallbackPort) {
     if (!raw)
         return { host: "127.0.0.1", port: fallbackPort };
+    // Accept host, host:port, or ws(s)://host:port[/path]
     const trimmed = raw.replace(/^wss?:\/\//, "").replace(/\/.*$/, "");
     const [hostPart, portPart] = trimmed.split(":");
     const port = portPart ? parseInt(portPart, 10) : fallbackPort;
@@ -53,7 +56,7 @@ export function relayOptionsFromEnv(defaultPort) {
 }
 /**
  * Manages the Rust `chorus-relay` subprocess and the host control WebSocket.
- * Joiner-facing protocol on `/ws` is unchanged; adapters talk to `/host`.
+ * Joiner-facing protocol on `/ws` is unchanged; the plugin talks to `/host`.
  */
 export class RelayServer {
     port;
@@ -68,6 +71,9 @@ export class RelayServer {
     onInjectInput;
     onChatMessage;
     onTyping;
+    onUserPending;
+    onUserJoined;
+    onUserLeft;
     constructor(port, opts = {}) {
         this.port = port;
         this.host = opts.host ?? "127.0.0.1";
@@ -82,6 +88,15 @@ export class RelayServer {
     }
     setTypingHandler(fn) {
         this.onTyping = fn;
+    }
+    setUserPendingHandler(fn) {
+        this.onUserPending = fn;
+    }
+    setUserJoinedHandler(fn) {
+        this.onUserJoined = fn;
+    }
+    setUserLeftHandler(fn) {
+        this.onUserLeft = fn;
     }
     async start() {
         if (this.running)
@@ -184,14 +199,19 @@ export class RelayServer {
             case "user.typing":
                 this.onTyping?.(msg.displayName);
                 break;
+            case "user.pending":
+                this.onUserPending?.(msg.user);
+                break;
             case "user.joined":
                 this.clients += 1;
+                this.onUserJoined?.(msg.user);
                 break;
             case "user.left":
                 this.clients = Math.max(0, this.clients - 1);
+                this.onUserLeft?.(msg.userId);
                 break;
             case "user.list":
-                this.clients = msg.users.length;
+                this.clients = msg.users.filter((u) => u.status === "active").length;
                 break;
             case "status":
                 this.clients = msg.clients;
@@ -223,6 +243,22 @@ export class RelayServer {
             }, 5000);
         });
     }
+    setSessionPolicy(opts) {
+        this.send({
+            type: "session.policy",
+            requireApproval: opts.requireApproval,
+            repoRemote: opts.repoRemote === null ? "" : opts.repoRemote,
+        });
+    }
+    approveUser(userId) {
+        this.send({ type: "host.approve", userId });
+    }
+    denyUser(userId) {
+        this.send({ type: "host.deny", userId });
+    }
+    kickUser(userId) {
+        this.send({ type: "host.kick", userId });
+    }
     pushEvent(event) {
         this.send({ type: "session.event", event });
     }
@@ -230,6 +266,8 @@ export class RelayServer {
         this.send({ type: "chat.send", content, displayName });
     }
     stop() {
+        // Only tear down session state on relays we own. External relays stay up
+        // so container agents can reconnect across test runs.
         if (!this.external) {
             this.send({ type: "host.close" });
         }

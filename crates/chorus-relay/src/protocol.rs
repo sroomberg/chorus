@@ -9,6 +9,13 @@ pub enum UserRole {
     View,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum UserStatus {
+    Pending,
+    Active,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionToken {
@@ -26,8 +33,8 @@ pub struct ConnectedUser {
     pub user_id: String,
     pub role: UserRole,
     pub joined_at: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
+    pub display_name: String,
+    pub status: UserStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +58,14 @@ pub struct ChatMessage {
     pub display_name: Option<String>,
     pub content: String,
     pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionPolicy {
+    pub require_approval: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo_remote: Option<String>,
 }
 
 /// Messages sent from the relay to joiner clients on `/ws`.
@@ -87,6 +102,15 @@ pub enum ServerMessage {
         #[serde(rename = "displayName")]
         display_name: Option<String>,
     },
+    #[serde(rename = "auth.pending")]
+    AuthPending {
+        #[serde(rename = "userId")]
+        user_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    #[serde(rename = "auth.denied")]
+    AuthDenied { message: String },
     #[serde(rename = "error")]
     Error { code: String, message: String },
 }
@@ -99,7 +123,9 @@ pub enum ClientMessage {
     Auth {
         token: String,
         #[serde(rename = "displayName")]
-        display_name: Option<String>,
+        display_name: String,
+        #[serde(rename = "repoRemote", default, skip_serializing_if = "Option::is_none")]
+        repo_remote: Option<String>,
     },
     #[serde(rename = "chat.send")]
     ChatSend { content: String },
@@ -142,6 +168,14 @@ pub enum HostToRelay {
     },
     #[serde(rename = "session.event")]
     SessionEvent { event: SessionEvent },
+    #[serde(rename = "session.policy")]
+    SessionPolicy {
+        #[serde(rename = "requireApproval")]
+        require_approval: Option<bool>,
+        /// Empty string clears the repo gate; omit to leave unchanged.
+        #[serde(rename = "repoRemote", default)]
+        repo_remote: Option<String>,
+    },
     #[serde(rename = "chat.send")]
     ChatSend {
         content: String,
@@ -160,6 +194,16 @@ pub enum HostToRelay {
     },
     #[serde(rename = "host.kick")]
     HostKick {
+        #[serde(rename = "userId")]
+        user_id: String,
+    },
+    #[serde(rename = "host.approve")]
+    HostApprove {
+        #[serde(rename = "userId")]
+        user_id: String,
+    },
+    #[serde(rename = "host.deny")]
+    HostDeny {
         #[serde(rename = "userId")]
         user_id: String,
     },
@@ -199,6 +243,8 @@ pub enum RelayToHost {
     },
     #[serde(rename = "user.joined")]
     UserJoined { user: ConnectedUser },
+    #[serde(rename = "user.pending")]
+    UserPending { user: ConnectedUser },
     #[serde(rename = "user.left")]
     UserLeft {
         #[serde(rename = "userId")]
@@ -207,7 +253,87 @@ pub enum RelayToHost {
     #[serde(rename = "user.list")]
     UserList { users: Vec<ConnectedUser> },
     #[serde(rename = "status")]
-    Status { clients: usize, running: bool },
+    Status {
+        clients: usize,
+        running: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        policy: Option<SessionPolicy>,
+    },
     #[serde(rename = "error")]
     Error { code: String, message: String },
+}
+
+/// Normalize git remotes so SSH/HTTPS clones of the same repo compare equal.
+pub fn normalize_repo_remote(raw: &str) -> String {
+    let mut s = raw.trim().to_string();
+    if s.is_empty() {
+        return s;
+    }
+    if s.to_ascii_lowercase().ends_with(".git") {
+        s.truncate(s.len() - 4);
+    }
+
+    if let Some(rest) = s.strip_prefix("git@") {
+        if let Some((host, path)) = rest.split_once(':') {
+            let path = path.trim_start_matches('/');
+            return format!("{}/{}", host.to_ascii_lowercase(), path)
+                .trim_end_matches('/')
+                .to_string();
+        }
+    }
+
+    let lower = s.to_ascii_lowercase();
+    if let Some(rest) = lower
+        .strip_prefix("git+https://")
+        .or_else(|| lower.strip_prefix("https://"))
+        .or_else(|| lower.strip_prefix("http://"))
+        .or_else(|| lower.strip_prefix("ssh://git@"))
+        .or_else(|| lower.strip_prefix("ssh://"))
+        .or_else(|| lower.strip_prefix("git@"))
+    {
+        s = rest.to_string();
+    } else {
+        s = lower;
+    }
+
+    if let Some(at) = s.find('@') {
+        if !s[..at].contains('/') {
+            s = s[at + 1..].to_string();
+        }
+    }
+
+    s.trim_end_matches('/').to_string()
+}
+
+pub fn normalize_display_name(raw: &str) -> Option<String> {
+    let name = raw.trim();
+    if name.is_empty() {
+        return None;
+    }
+    if name.len() > 64 {
+        Some(name.chars().take(64).collect())
+    } else {
+        Some(name.to_string())
+    }
+}
+
+#[cfg(test)]
+mod repo_tests {
+    use super::normalize_repo_remote;
+
+    #[test]
+    fn normalizes_ssh_and_https() {
+        assert_eq!(
+            normalize_repo_remote("git@github.com:acme/app.git"),
+            "github.com/acme/app"
+        );
+        assert_eq!(
+            normalize_repo_remote("https://github.com/acme/app.git"),
+            "github.com/acme/app"
+        );
+        assert_eq!(
+            normalize_repo_remote("ssh://git@gitlab.com/acme/app"),
+            "gitlab.com/acme/app"
+        );
+    }
 }
