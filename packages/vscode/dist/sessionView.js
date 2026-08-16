@@ -87,7 +87,7 @@ export class SessionViewProvider {
 </style>
 </head>
 <body>
-  <div class="meta">Mode: <strong>${escapeHtml(mode)}</strong></div>
+  <div class="meta">Mode: <strong>${escapeHtml(mode)}</strong>${mode === "pending" ? " — waiting for host approval" : ""}</div>
   <div class="feed" id="feed">${body || "<div class='line system'><pre>Idle — Share or Join a Chorus session.</pre></div>"}</div>
   <div class="compose">
     <div class="row">

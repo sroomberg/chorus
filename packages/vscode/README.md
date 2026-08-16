@@ -15,6 +15,15 @@ VS Code adapter for [Chorus](../../README.md) — share or join a live collabora
 
 The **Chorus** activity-bar panel shows the mirrored transcript and a compose box.
 
+## Access control
+
+Matches the OpenCode plugin defaults:
+
+- **Chorus: Share Session** sets `session.policy` with `requireApproval` (setting `chorus.requireApproval`, default `true`) and the workspace `origin` remote when present
+- Pending joiners trigger an Approve/Deny notification; commands **Chorus: Approve Joiner** / **Deny Joiner**
+- Join requires a non-empty display name and sends the workspace git remote for same-repo gating
+- While `pending`, prompts/chat are blocked until the host approves
+
 ## Honest scope (v1)
 
 - Speaks the same wire protocol as the OpenCode plugin (`@chorus/shared` + `@chorus/client`).

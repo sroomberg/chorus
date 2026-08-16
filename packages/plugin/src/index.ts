@@ -2,7 +2,9 @@ import { RelayServer, relayOptionsFromEnv } from "./relay/index.js";
 import { JoinClient } from "./join/index.js";
 import type { BackupAdapter } from "./backup/index.js";
 import { S3BackupAdapter } from "./backup/index.js";
+import { detectRepoRemote } from "./git.js";
 import type { SessionEvent, ShareInfo, UserRole } from "@chorus/shared";
+import { normalizeDisplayName } from "@chorus/shared";
 import { networkInterfaces } from "node:os";
 import { mkdirSync, existsSync, copyFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -287,11 +289,34 @@ export default async function chorusPlugin(input: PluginInput) {
   });
 
   relay.setChatHandler((displayName, content) => {
-    toast(`💬 [${displayName ?? "guest"}]: ${content}`);
+    toast(`[${displayName ?? "guest"}]: ${content}`);
   });
 
   relay.setTypingHandler((displayName) => {
-    toast(`✏️ [${displayName ?? "someone"}] is typing…`, "info", 2000);
+    toast(`[${displayName ?? "someone"}] is typing…`, "info", 2000);
+  });
+
+  relay.setUserPendingHandler((user) => {
+    toast(
+      `Join request from ${user.displayName} (${user.role}). Run chorus-approve userId="${user.userId}" or chorus-deny.`,
+      "warning",
+      12_000
+    );
+    if (sessionId) {
+      say(
+        sessionId,
+        `Pending join: ${user.displayName} wants ${user.role} access (userId=${user.userId}). ` +
+          `Approve with /chorus-approve ${user.userId} or deny with /chorus-deny ${user.userId}.`
+      );
+    }
+  });
+
+  relay.setUserJoinedHandler((user) => {
+    toast(`${user.displayName} joined (${user.role})`, "success", 4000);
+  });
+
+  relay.setUserLeftHandler((userId) => {
+    toast(`User left (${userId.slice(0, 8)}…)`, "info", 3000);
   });
 
   return {
@@ -376,7 +401,9 @@ export default async function chorusPlugin(input: PluginInput) {
         description:
           "Start sharing this session and generate a join token for a collaborator. " +
           "The recipient must have OpenCode + the chorus plugin installed and run chorus-join. " +
-          "Roles: edit (default, can send LLM messages), view (read-only), admin (full control).",
+          "Roles: edit (default, can send LLM messages), view (read-only), admin (full control). " +
+          "By default the host must approve each joiner; set requireApproval=false to skip. " +
+          "When this directory is a git checkout, joiners must present the same origin remote.",
         args: {
           role: z
             .enum(["edit", "view", "admin"])
@@ -385,10 +412,21 @@ export default async function chorusPlugin(input: PluginInput) {
               "Role for the recipient. edit = can contribute (default); " +
                 "view = read-only; admin = full control."
             ),
+          requireApproval: z
+            .boolean()
+            .optional()
+            .describe(
+              "If true (default), joiners wait in pending until chorus-approve. " +
+                "Set false for open token join (LAN/trusted)."
+            ),
         },
-        async execute(args: { role?: "edit" | "view" | "admin" }, context: ToolContext) {
+        async execute(
+          args: { role?: "edit" | "view" | "admin"; requireApproval?: boolean },
+          context: ToolContext
+        ) {
           const grantedRole: UserRole =
             args.role === "admin" ? "admin" : args.role === "view" ? "view" : "edit";
+          const requireApproval = args.requireApproval !== false;
 
           const sid = sessionId || context.sessionID;
 
@@ -409,22 +447,43 @@ export default async function chorusPlugin(input: PluginInput) {
             say(sid, where);
           }
 
+          const repoRemote = detectRepoRemote(context.directory);
+          relay.setSessionPolicy({
+            requireApproval,
+            repoRemote: repoRemote ?? "",
+          });
+
           const joinHost = publicJoinHost(relay.getPort());
           const token = await relay.issueToken(sid, grantedRole);
-          const info: ShareInfo & { role: string } = {
+          const info: ShareInfo & {
+            role: string;
+            requireApproval: boolean;
+            repoRemote?: string;
+          } = {
             token: token.token,
             sessionId: sid,
             port: relay.getPort(),
             url: joinHost,
             role: grantedRole,
+            requireApproval,
+            ...(repoRemote ? { repoRemote } : {}),
           };
 
-          const joinCommand = `/chorus-join token="${token.token}" host="${joinHost}"`;
-          say(sid, `Send this command to your collaborator:\n${joinCommand}`);
+          const joinCommand = `/chorus-join token="${token.token}" host="${joinHost}" name="YOUR_NAME"`;
+          const policyNotes = [
+            requireApproval
+              ? "Joiners wait for your approval (chorus-approve / chorus-deny)."
+              : "Open join: token holders connect without approval.",
+            repoRemote
+              ? `Repo gate on: joiners must be in a clone of ${repoRemote}.`
+              : "No git origin detected — repo gate disabled for this share.",
+          ].join(" ");
+          say(sid, `Send this command to your collaborator:\n${joinCommand}\n\n${policyNotes}`);
 
           return JSON.stringify({
             ...info,
             connect: joinCommand,
+            policyNotes,
           });
         },
       },
@@ -432,25 +491,34 @@ export default async function chorusPlugin(input: PluginInput) {
       "chorus-join": {
         description:
           "Join another user's shared OpenCode session. " +
-          "Requires the token and host address provided by the session organizer via chorus-share. " +
-          "Once joined, your messages are also forwarded to the shared session.",
+          "Requires the token, host address, and a display name from the organizer via chorus-share. " +
+          "If the host enabled approval, you wait in pending until they approve. " +
+          "If the host bound the session to a git repo, you must be in a matching clone.",
         args: {
           token: z.string().describe("The session token provided by the organizer."),
           host: z
             .string()
             .describe("Host address of the organizer's relay, e.g. 192.168.1.5:7742"),
-          name: z
-            .string()
-            .optional()
-            .describe("Your display name in the session (defaults to system username)."),
+          name: z.string().describe("Your display name in the session (required)."),
         },
-        async execute(args: { token: string; host: string; name?: string }, context: ToolContext) {
+        async execute(
+          args: { token: string; host: string; name: string },
+          context: ToolContext
+        ) {
           if (sharing) {
             return JSON.stringify({
               joined: false,
               error:
                 "This session is currently sharing. Run chorus-stop before chorus-join — " +
                 "hosting and joining on the same agent creates an event feedback loop.",
+            });
+          }
+
+          const displayName = normalizeDisplayName(args.name);
+          if (!displayName) {
+            return JSON.stringify({
+              joined: false,
+              error: "A non-empty name is required to join a chorus session.",
             });
           }
 
@@ -461,8 +529,13 @@ export default async function chorusPlugin(input: PluginInput) {
 
           joinSessionId = context.sessionID;
           mirroredEventIds.clear();
-          const displayName = args.name ?? process.env["USER"] ?? "unknown";
-          const jc = new JoinClient(`ws://${args.host}/ws`, args.token, displayName);
+          const repoRemote = detectRepoRemote(context.directory);
+          const jc = new JoinClient(
+            `ws://${args.host}/ws`,
+            args.token,
+            displayName,
+            repoRemote
+          );
 
           try {
             await jc.connect();
@@ -475,11 +548,18 @@ export default async function chorusPlugin(input: PluginInput) {
           }
 
           jc.setChatHandler((msgDisplayName, content) => {
-            toast(`💬 [${msgDisplayName ?? "host"}]: ${content}`);
+            toast(`[${msgDisplayName ?? "host"}]: ${content}`);
           });
 
           jc.setTypingHandler((typingDisplayName) => {
-            toast(`✏️ [${typingDisplayName ?? "someone"}] is typing…`, "info", 2000);
+            toast(`[${typingDisplayName ?? "someone"}] is typing…`, "info", 2000);
+          });
+
+          jc.setApprovedHandler(() => {
+            toast("Host approved — you are in the session.", "success", 5000);
+            for (const event of jc.getState().recentEvents) {
+              mirrorEventToJoiner(event);
+            }
           });
 
           // Live host transcript → joiner session (not toasts).
@@ -487,23 +567,90 @@ export default async function chorusPlugin(input: PluginInput) {
             mirrorEventToJoiner(event);
           });
 
-          // Replay buffered history from auth so late joiners catch up.
-          for (const event of jc.getState().recentEvents) {
-            mirrorEventToJoiner(event);
+          // Replay buffered history once active (immediate when approval is off).
+          if (jc.getState().status === "connected") {
+            for (const event of jc.getState().recentEvents) {
+              mirrorEventToJoiner(event);
+            }
           }
 
           joinClient = jc;
           const state = jc.getState();
+          if (state.status === "pending") {
+            return JSON.stringify({
+              joined: true,
+              pending: true,
+              userId: state.userId,
+              message:
+                "Connected and waiting for host approval. " +
+                "You cannot send prompts or chat until the host runs chorus-approve. " +
+                "Run chorus-leave to disconnect.",
+            });
+          }
           return JSON.stringify({
             joined: true,
+            pending: false,
             users: state.users,
             recentEventCount: state.recentEvents.length,
             message:
               "Connected. This agent mirrors the shared host transcript in real time " +
-              "([Host]/ / [name]: / [AI]:). Your prompts go to the host session; local LLM is aborted. " +
+              "([Host]: / [name]: / [AI]:). Your prompts go to the host session; local LLM is aborted. " +
               "For live UI updates prefer the web UI at this agent's port (attach TUI often lags). " +
               "Run chorus-leave to disconnect.",
           });
+        },
+      },
+
+      "chorus-approve": {
+        description:
+          "Approve a pending joiner so they can enter the shared session. " +
+          "Use the userId from the join-request toast or chorus-status.",
+        args: {
+          userId: z.string().describe("Pending user id to approve."),
+        },
+        async execute(args: { userId: string }) {
+          if (!sharing) {
+            return JSON.stringify({
+              approved: false,
+              error: "Not currently sharing a session.",
+            });
+          }
+          relay.approveUser(args.userId);
+          return JSON.stringify({ approved: true, userId: args.userId });
+        },
+      },
+
+      "chorus-deny": {
+        description: "Deny a pending joiner and disconnect them from the relay.",
+        args: {
+          userId: z.string().describe("Pending user id to deny."),
+        },
+        async execute(args: { userId: string }) {
+          if (!sharing) {
+            return JSON.stringify({
+              denied: false,
+              error: "Not currently sharing a session.",
+            });
+          }
+          relay.denyUser(args.userId);
+          return JSON.stringify({ denied: true, userId: args.userId });
+        },
+      },
+
+      "chorus-kick": {
+        description: "Disconnect an active joiner from the shared session.",
+        args: {
+          userId: z.string().describe("Active user id to kick."),
+        },
+        async execute(args: { userId: string }) {
+          if (!sharing) {
+            return JSON.stringify({
+              kicked: false,
+              error: "Not currently sharing a session.",
+            });
+          }
+          relay.kickUser(args.userId);
+          return JSON.stringify({ kicked: true, userId: args.userId });
         },
       },
 

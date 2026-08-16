@@ -88,9 +88,11 @@ export default function chorusPlugin(input: PluginInput): Promise<{
                     view: "view";
                     admin: "admin";
                 }>>;
+                requireApproval: z.ZodOptional<z.ZodBoolean>;
             };
             execute(args: {
                 role?: "edit" | "view" | "admin";
+                requireApproval?: boolean;
             }, context: ToolContext): Promise<string>;
         };
         "chorus-join": {
@@ -98,13 +100,40 @@ export default function chorusPlugin(input: PluginInput): Promise<{
             args: {
                 token: z.ZodString;
                 host: z.ZodString;
-                name: z.ZodOptional<z.ZodString>;
+                name: z.ZodString;
             };
             execute(args: {
                 token: string;
                 host: string;
-                name?: string;
+                name: string;
             }, context: ToolContext): Promise<string>;
+        };
+        "chorus-approve": {
+            description: string;
+            args: {
+                userId: z.ZodString;
+            };
+            execute(args: {
+                userId: string;
+            }): Promise<string>;
+        };
+        "chorus-deny": {
+            description: string;
+            args: {
+                userId: z.ZodString;
+            };
+            execute(args: {
+                userId: string;
+            }): Promise<string>;
+        };
+        "chorus-kick": {
+            description: string;
+            args: {
+                userId: z.ZodString;
+            };
+            execute(args: {
+                userId: string;
+            }): Promise<string>;
         };
         "chorus-leave": {
             description: string;

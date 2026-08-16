@@ -15,6 +15,8 @@ pub enum ControlRequest {
         token: String,
         #[serde(default = "default_display_name")]
         display_name: String,
+        #[serde(default)]
+        repo_remote: Option<String>,
     },
     Leave,
     Chat {

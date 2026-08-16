@@ -30,8 +30,14 @@ export class AccessManager {
     revokeToken(token) {
         this.tokens.delete(token);
     }
-    addUser(userId, role, displayName) {
-        const user = { userId, role, joinedAt: Date.now(), displayName };
+    addUser(userId, role, displayName, status = "active") {
+        const user = {
+            userId,
+            role,
+            joinedAt: Date.now(),
+            displayName,
+            status,
+        };
         this.users.set(userId, user);
         return user;
     }
@@ -48,15 +54,34 @@ export class AccessManager {
         user.role = role;
         return true;
     }
+    approve(userId) {
+        const user = this.users.get(userId);
+        if (!user || user.status !== "pending")
+            return null;
+        user.status = "active";
+        return user;
+    }
+    isPending(userId) {
+        return this.users.get(userId)?.status === "pending";
+    }
+    isActive(userId) {
+        return this.users.get(userId)?.status === "active";
+    }
     listUsers() {
         return [...this.users.values()];
     }
+    listActiveUsers() {
+        return [...this.users.values()].filter((u) => u.status === "active");
+    }
     isAdmin(userId) {
-        return this.users.get(userId)?.role === "admin";
+        const user = this.users.get(userId);
+        return user?.role === "admin" && user.status === "active";
     }
     canSendInput(userId) {
-        const role = this.users.get(userId)?.role;
-        return role === "admin" || role === "edit";
+        const user = this.users.get(userId);
+        if (!user || user.status !== "active")
+            return false;
+        return user.role === "admin" || user.role === "edit";
     }
 }
 //# sourceMappingURL=index.js.map
