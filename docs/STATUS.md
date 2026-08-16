@@ -55,8 +55,15 @@ Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`
 
 `scripts/multi-agent.ts` (via `bun run multi-agent`) can spawn N isolated `opencode serve` instances with the Chorus plugin, then automate `/chorus-share` + `/chorus-join` through OpenCode’s `/session/:id/command` API. Also includes `relay-stress` for concurrent protocol joiners without OpenCode.
 
+## Adapter surface (monorepo)
+
+- **OpenCode** (`packages/plugin`) — primary host; full LLM loop + transcript mirror.
+- **VS Code** (`packages/vscode`) — share/join via `@chorus/client`; sidebar transcript; joiner `collab.input` works against an OpenCode host. VS Code share does **not** drive OpenCode’s model — publish host lines manually or pair with OpenCode.
+- **Zed** — joiner-first scaffold when present under `packages/zed` / related crates (WASM extension limits; helper binary pattern).
+
 ## Explicit non-goals (for now)
 
 - Rebuilding a full coding agent harness from scratch.
 - Competing with multi-agent orchestration plugins.
 - Making the browser app the primary UX again (optional later for non-OpenCode observers).
+- Splitting the monorepo until adapter publish cadence actually diverges.
