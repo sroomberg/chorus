@@ -1,6 +1,7 @@
 use crate::access::AccessManager;
 use crate::protocol::{
-    ChatMessage, ClientMessage, HostToRelay, RelayToHost, ServerMessage, UserRole,
+    normalize_display_name, normalize_repo_remote, ChatMessage, ClientMessage, HostToRelay,
+    RelayToHost, ServerMessage, SessionPolicy, UserRole, UserStatus,
 };
 use crate::state::{ClientTx, HostTx, RelayState, SharedState};
 use axum::extract::ws::{Message, WebSocket};
@@ -82,6 +83,26 @@ async fn ws_host(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl In
     ws.on_upgrade(move |socket| handle_host(socket, state.relay, state.host_token))
 }
 
+fn admit_active(guard: &mut RelayState, uid: &str, user: &crate::protocol::ConnectedUser, tx: &ClientTx) {
+    let history = ServerMessage::SessionHistory {
+        events: guard.event_history.clone(),
+    };
+    let others = ServerMessage::UserList {
+        users: guard
+            .access
+            .list_active_users()
+            .into_iter()
+            .filter(|u| u.user_id != uid)
+            .collect(),
+    };
+    let _ = tx.send(text_msg(&history));
+    let _ = tx.send(text_msg(&others));
+
+    let joined = ServerMessage::UserJoined { user: user.clone() };
+    guard.broadcast_active_except(uid, &joined);
+    guard.send_host(&RelayToHost::UserJoined { user: user.clone() });
+}
+
 async fn handle_joiner(socket: WebSocket, state: SharedState) {
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx): (ClientTx, _) = mpsc::unbounded_channel();
@@ -118,12 +139,46 @@ async fn handle_joiner(socket: WebSocket, state: SharedState) {
             ClientMessage::Auth {
                 token,
                 display_name,
+                repo_remote,
             } => {
                 if user_id.is_some() {
                     continue;
                 }
 
+                let Some(display_name) = normalize_display_name(&display_name) else {
+                    let _ = tx.send(text_msg(&ServerMessage::Error {
+                        code: "NAME_REQUIRED".into(),
+                        message: "A non-empty displayName is required to join".into(),
+                    }));
+                    let _ = tx.send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                        code: axum::extract::ws::CloseCode::from(4002u16),
+                        reason: "name required".into(),
+                    })));
+                    break;
+                };
+
                 let mut guard = state.write().await;
+
+                if let Some(ref expected) = guard.policy.repo_remote {
+                    let provided = repo_remote
+                        .as_deref()
+                        .map(normalize_repo_remote)
+                        .filter(|s| !s.is_empty());
+                    if provided.as_ref() != Some(expected) {
+                        let _ = tx.send(text_msg(&ServerMessage::Error {
+                            code: "REPO_ACCESS_DENIED".into(),
+                            message: "Joiner must be in a clone of the host session repository"
+                                .into(),
+                        }));
+                        drop(guard);
+                        let _ = tx.send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                            code: axum::extract::ws::CloseCode::from(4004u16),
+                            reason: "repo access denied".into(),
+                        })));
+                        break;
+                    }
+                }
+
                 let st = guard.access.validate_token(&token);
                 let Some(st) = st else {
                     let _ = tx.send(text_msg(&ServerMessage::Error {
@@ -139,23 +194,28 @@ async fn handle_joiner(socket: WebSocket, state: SharedState) {
                 };
 
                 let uid = AccessManager::new_user_id();
+                let status = if guard.policy.require_approval {
+                    UserStatus::Pending
+                } else {
+                    UserStatus::Active
+                };
                 let user = guard
                     .access
-                    .add_user(uid.clone(), st.granted_role, display_name);
+                    .add_user(uid.clone(), st.granted_role, display_name, status);
                 guard.clients.insert(uid.clone(), tx.clone());
 
-                let history = ServerMessage::SessionHistory {
-                    events: guard.event_history.clone(),
-                };
-                let others = ServerMessage::UserList {
-                    users: guard.list_users_except(&uid),
-                };
-                let _ = tx.send(text_msg(&history));
-                let _ = tx.send(text_msg(&others));
+                if user.status == UserStatus::Pending {
+                    let _ = tx.send(text_msg(&ServerMessage::AuthPending {
+                        user_id: uid.clone(),
+                        message: Some("Waiting for host approval".into()),
+                    }));
+                    guard.send_host(&RelayToHost::UserPending {
+                        user: user.clone(),
+                    });
+                } else {
+                    admit_active(&mut guard, &uid, &user, &tx);
+                }
 
-                let joined = ServerMessage::UserJoined { user: user.clone() };
-                guard.broadcast_joiners(&joined);
-                guard.send_host(&RelayToHost::UserJoined { user: user.clone() });
                 user_id = Some(uid);
             }
 
@@ -174,12 +234,15 @@ async fn handle_joiner(socket: WebSocket, state: SharedState) {
 
     if let Some(uid) = user_id {
         let mut guard = state.write().await;
+        let was_active = guard.access.is_active(&uid);
         guard.access.remove_user(&uid);
         guard.clients.remove(&uid);
-        let left = ServerMessage::UserLeft {
-            user_id: uid.clone(),
-        };
-        guard.broadcast_joiners(&left);
+        if was_active {
+            let left = ServerMessage::UserLeft {
+                user_id: uid.clone(),
+            };
+            guard.broadcast_active(&left);
+        }
         guard.send_host(&RelayToHost::UserLeft { user_id: uid });
     }
 
@@ -197,15 +260,22 @@ async fn handle_joiner_message(
     match msg {
         ClientMessage::Typing => {
             let guard = state.read().await;
+            if !guard.access.is_active(user_id) {
+                let _ = tx.send(text_msg(&ServerMessage::Error {
+                    code: "PENDING".into(),
+                    message: "Waiting for host approval".into(),
+                }));
+                return;
+            }
             let display_name = guard
                 .access
                 .get_user(user_id)
-                .and_then(|u| u.display_name.clone());
+                .map(|u| u.display_name.clone());
             let typing = ServerMessage::UserTyping {
                 user_id: user_id.to_string(),
                 display_name: display_name.clone(),
             };
-            guard.broadcast_except(user_id, &typing);
+            guard.broadcast_active_except(user_id, &typing);
             guard.send_host(&RelayToHost::UserTyping {
                 user_id: user_id.to_string(),
                 display_name,
@@ -214,10 +284,17 @@ async fn handle_joiner_message(
 
         ClientMessage::ChatSend { content } => {
             let mut guard = state.write().await;
+            if !guard.access.is_active(user_id) {
+                let _ = tx.send(text_msg(&ServerMessage::Error {
+                    code: "PENDING".into(),
+                    message: "Waiting for host approval".into(),
+                }));
+                return;
+            }
             let display_name = guard
                 .access
                 .get_user(user_id)
-                .and_then(|u| u.display_name.clone());
+                .map(|u| u.display_name.clone());
             let chat = ChatMessage {
                 id: random_hex(8),
                 session_id: String::new(),
@@ -230,12 +307,19 @@ async fn handle_joiner_message(
             let wire = ServerMessage::ChatMessage {
                 message: chat.clone(),
             };
-            guard.broadcast_joiners(&wire);
+            guard.broadcast_active(&wire);
             guard.send_host(&RelayToHost::ChatMessage { message: chat });
         }
 
         ClientMessage::CollabInput { content } => {
             let guard = state.read().await;
+            if !guard.access.is_active(user_id) {
+                let _ = tx.send(text_msg(&ServerMessage::Error {
+                    code: "PENDING".into(),
+                    message: "Waiting for host approval".into(),
+                }));
+                return;
+            }
             if !guard.access.can_send_input(user_id) {
                 let _ = tx.send(text_msg(&ServerMessage::Error {
                     code: "FORBIDDEN".into(),
@@ -246,7 +330,7 @@ async fn handle_joiner_message(
             let display_name = guard
                 .access
                 .get_user(user_id)
-                .and_then(|u| u.display_name.clone());
+                .map(|u| u.display_name.clone());
             guard.send_host(&RelayToHost::CollabInput {
                 user_id: user_id.to_string(),
                 display_name,
@@ -260,7 +344,7 @@ async fn handle_joiner_message(
                 return;
             }
             if guard.access.set_role(&target, UserRole::Edit) {
-                guard.broadcast_joiners(&ServerMessage::UserRoleChanged {
+                guard.broadcast_active(&ServerMessage::UserRoleChanged {
                     user_id: target,
                     role: UserRole::Edit,
                 });
@@ -273,7 +357,7 @@ async fn handle_joiner_message(
                 return;
             }
             if guard.access.set_role(&target, UserRole::View) {
-                guard.broadcast_joiners(&ServerMessage::UserRoleChanged {
+                guard.broadcast_active(&ServerMessage::UserRoleChanged {
                     user_id: target,
                     role: UserRole::View,
                 });
@@ -298,7 +382,7 @@ async fn handle_joiner_message(
             if !guard.access.is_admin(user_id) {
                 return;
             }
-            guard.broadcast_joiners(&ServerMessage::SessionClosed);
+            guard.broadcast_all_clients(&ServerMessage::SessionClosed);
             guard.running = false;
             for ctx in guard.clients.values() {
                 let _ = ctx.send(Message::Close(None));
@@ -384,10 +468,28 @@ async fn handle_host(socket: WebSocket, state: SharedState, host_token: Arc<Stri
                 let _ = tx.send(text_msg_host(&RelayToHost::TokenIssued { token: st }));
             }
 
+            HostToRelay::SessionPolicy {
+                require_approval,
+                repo_remote,
+            } => {
+                let mut guard = state.write().await;
+                if let Some(v) = require_approval {
+                    guard.policy.require_approval = v;
+                }
+                if let Some(raw) = repo_remote {
+                    let normalized = normalize_repo_remote(&raw);
+                    guard.policy.repo_remote = if normalized.is_empty() {
+                        None
+                    } else {
+                        Some(normalized)
+                    };
+                }
+            }
+
             HostToRelay::SessionEvent { event } => {
                 let mut guard = state.write().await;
                 guard.event_history.push(event.clone());
-                guard.broadcast_joiners(&ServerMessage::SessionEvent { event });
+                guard.broadcast_active(&ServerMessage::SessionEvent { event });
             }
 
             HostToRelay::ChatSend {
@@ -404,7 +506,7 @@ async fn handle_host(socket: WebSocket, state: SharedState, host_token: Arc<Stri
                     timestamp: now_ms(),
                 };
                 guard.chat_history.push(chat.clone());
-                guard.broadcast_joiners(&ServerMessage::ChatMessage {
+                guard.broadcast_active(&ServerMessage::ChatMessage {
                     message: chat.clone(),
                 });
                 let _ = tx.send(text_msg_host(&RelayToHost::ChatMessage { message: chat }));
@@ -413,7 +515,7 @@ async fn handle_host(socket: WebSocket, state: SharedState, host_token: Arc<Stri
             HostToRelay::HostPromote { user_id } => {
                 let mut guard = state.write().await;
                 if guard.access.set_role(&user_id, UserRole::Edit) {
-                    guard.broadcast_joiners(&ServerMessage::UserRoleChanged {
+                    guard.broadcast_active(&ServerMessage::UserRoleChanged {
                         user_id,
                         role: UserRole::Edit,
                     });
@@ -423,7 +525,7 @@ async fn handle_host(socket: WebSocket, state: SharedState, host_token: Arc<Stri
             HostToRelay::HostDemote { user_id } => {
                 let mut guard = state.write().await;
                 if guard.access.set_role(&user_id, UserRole::View) {
-                    guard.broadcast_joiners(&ServerMessage::UserRoleChanged {
+                    guard.broadcast_active(&ServerMessage::UserRoleChanged {
                         user_id,
                         role: UserRole::View,
                     });
@@ -440,9 +542,35 @@ async fn handle_host(socket: WebSocket, state: SharedState, host_token: Arc<Stri
                 }
             }
 
+            HostToRelay::HostApprove { user_id } => {
+                let mut guard = state.write().await;
+                if let Some(user) = guard.access.approve(&user_id) {
+                    if let Some(tx) = guard.clients.get(&user_id).cloned() {
+                        admit_active(&mut guard, &user_id, &user, &tx);
+                    }
+                }
+            }
+
+            HostToRelay::HostDeny { user_id } => {
+                let guard = state.read().await;
+                if guard.access.is_pending(&user_id) {
+                    if let Some(target_tx) = guard.clients.get(&user_id) {
+                        let _ = target_tx.send(text_msg(&ServerMessage::AuthDenied {
+                            message: "Host denied your join request".into(),
+                        }));
+                        let _ = target_tx.send(Message::Close(Some(
+                            axum::extract::ws::CloseFrame {
+                                code: axum::extract::ws::CloseCode::from(4005u16),
+                                reason: "denied by host".into(),
+                            },
+                        )));
+                    }
+                }
+            }
+
             HostToRelay::HostClose => {
                 let mut guard = state.write().await;
-                guard.broadcast_joiners(&ServerMessage::SessionClosed);
+                guard.broadcast_all_clients(&ServerMessage::SessionClosed);
                 for ctx in guard.clients.values() {
                     let _ = ctx.send(Message::Close(None));
                 }
@@ -450,6 +578,7 @@ async fn handle_host(socket: WebSocket, state: SharedState, host_token: Arc<Stri
                 guard.access = AccessManager::new();
                 guard.event_history.clear();
                 guard.chat_history.clear();
+                guard.policy = SessionPolicy::default();
                 guard.running = false;
             }
 
@@ -458,6 +587,7 @@ async fn handle_host(socket: WebSocket, state: SharedState, host_token: Arc<Stri
                 let _ = tx.send(text_msg_host(&RelayToHost::Status {
                     clients: guard.client_count(),
                     running: guard.running,
+                    policy: Some(guard.policy.clone()),
                 }));
             }
         }

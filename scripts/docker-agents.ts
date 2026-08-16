@@ -425,6 +425,9 @@ async function cmdSmoke(): Promise<void> {
     const needed = [
       "chorus-share",
       "chorus-join",
+      "chorus-approve",
+      "chorus-deny",
+      "chorus-kick",
       "chorus-leave",
       "chorus-chat",
       "chorus-status",
@@ -527,8 +530,13 @@ async function cmdPair(args: Args): Promise<void> {
     body: JSON.stringify({ title: "chorus-docker-host" }),
   });
 
-  console.log(`→ /chorus-share ${args.role}`);
-  const share = await runCommand(hostUrl, hostSession.id, "chorus-share", args.role);
+  console.log(`→ /chorus-share ${args.role} requireApproval=false`);
+  const share = await runCommand(
+    hostUrl,
+    hostSession.id,
+    "chorus-share",
+    `${args.role} requireApproval=false`
+  );
   console.log(share.text || "(no text)");
 
   const join = await extractShareJoin(hostUrl, hostSession.id, share.text);
