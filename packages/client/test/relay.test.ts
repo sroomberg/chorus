@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { RelayServer } from "../src/relay/index.js";
+import { RelayServer } from "../src/index.js";
 import type { ServerMessage } from "@chorus/shared";
 import { encodeMessage, decodeServerMessage } from "@chorus/shared";
 
