@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- VS Code extension (`packages/vscode`) — share/join/chat over the same relay protocol; Session sidebar + commands
+- Extract `@chorus/client` (`JoinClient` + `RelayServer`) shared by OpenCode plugin, VS Code, and future adapters
+- Cross-adapter relay e2e: VS Code host ↔ terminal joiner and terminal host ↔ VS Code joiner (`bun run test:vscode-relay-e2e`)
+
 ## v2.0.0 — 2026-08-21
 
 Enterprise network lockdown for Chorus: keep the relay off the open internet with CIDR allowlists, private bind, and VPN/VPC deployment docs.
