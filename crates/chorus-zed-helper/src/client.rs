@@ -15,6 +15,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 pub enum JoinStatus {
     Disconnected,
     Connecting,
+    Pending,
     Connected,
     Error,
 }
@@ -59,12 +60,18 @@ struct Inner {
 }
 
 impl JoinClient {
-    /// Connect to `ws://host/ws` (or `wss://`), authenticate, and wait for history.
+    /// Connect to `ws://host/ws` (or `wss://`), authenticate, and wait for
+    /// `session.history` (active) or `auth.pending` (awaiting host approval).
     pub async fn connect(
         host: &str,
         token: &str,
         display_name: &str,
+        repo_remote: Option<&str>,
     ) -> Result<Self, String> {
+        let name = display_name.trim();
+        if name.is_empty() {
+            return Err("display name is required".into());
+        }
         let ws_url = normalize_ws_url(host)?;
         let (ws, _) = connect_async(&ws_url)
             .await
@@ -73,7 +80,11 @@ impl JoinClient {
         let (mut write, mut read) = ws.split();
         let auth = ClientMessage::Auth {
             token: token.to_string(),
-            display_name: Some(display_name.to_string()),
+            display_name: name.to_string(),
+            repo_remote: repo_remote
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string),
         };
         write
             .send(Message::Text(
@@ -84,14 +95,14 @@ impl JoinClient {
             .await
             .map_err(|e| format!("auth send failed: {e}"))?;
 
-        let mut snapshot = SessionSnapshot::new(host, display_name);
+        let mut snapshot = SessionSnapshot::new(host, name);
         snapshot.status = JoinStatus::Connecting;
 
-        // Wait until session.history (connected) or error / timeout.
+        // Wait until session.history (connected), auth.pending, deny/error, or timeout.
         let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
         loop {
             if tokio::time::Instant::now() > deadline {
-                return Err("timed out waiting for session.history".into());
+                return Err("timed out waiting for session.history or auth.pending".into());
             }
             let next = tokio::time::timeout(Duration::from_secs(5), read.next())
                 .await
@@ -109,7 +120,10 @@ impl JoinClient {
                 serde_json::from_str(&msg).map_err(|e| format!("bad server json: {e}"))?;
             apply_server_message(&mut snapshot, &server);
             match server {
-                ServerMessage::SessionHistory { .. } => break,
+                ServerMessage::SessionHistory { .. } | ServerMessage::AuthPending { .. } => break,
+                ServerMessage::AuthDenied { message } => {
+                    return Err(message);
+                }
                 ServerMessage::Error { message, .. } => {
                     return Err(message);
                 }
@@ -174,6 +188,8 @@ impl JoinClient {
     }
 
     pub fn send_chat(&self, content: &str) -> Result<(), String> {
+        // Pending joiners are blocked by the relay; fail closed client-side too.
+        // Snapshot check is best-effort (async); relay enforces the real gate.
         self.outbound
             .send(ClientMessage::ChatSend {
                 content: content.to_string(),
@@ -228,6 +244,14 @@ fn apply_server_message(snapshot: &mut SessionSnapshot, msg: &ServerMessage) {
             }
             snapshot.last_error = None;
         }
+        ServerMessage::AuthPending { .. } => {
+            snapshot.status = JoinStatus::Pending;
+            snapshot.last_error = None;
+        }
+        ServerMessage::AuthDenied { message } => {
+            snapshot.status = JoinStatus::Error;
+            snapshot.last_error = Some(message.clone());
+        }
         ServerMessage::SessionEvent { event } => {
             if snapshot.session_id.is_none() {
                 snapshot.session_id = Some(event.session_id.clone());
@@ -236,6 +260,10 @@ fn apply_server_message(snapshot: &mut SessionSnapshot, msg: &ServerMessage) {
             if snapshot.recent_events.len() > 50 {
                 let drain = snapshot.recent_events.len() - 50;
                 snapshot.recent_events.drain(0..drain);
+            }
+            // Approval often arrives as history/events after pending.
+            if snapshot.status == JoinStatus::Pending {
+                snapshot.status = JoinStatus::Connected;
             }
         }
         ServerMessage::ChatMessage { message } => {
@@ -331,12 +359,14 @@ mod tests {
     fn client_messages_match_fixtures_shape() {
         let auth = serde_json::to_value(ClientMessage::Auth {
             token: "abc123".into(),
-            display_name: Some("Alice".into()),
+            display_name: "Alice".into(),
+            repo_remote: Some("https://github.com/acme/app.git".into()),
         })
         .unwrap();
         assert_eq!(auth["type"], "auth");
         assert_eq!(auth["token"], "abc123");
         assert_eq!(auth["displayName"], "Alice");
+        assert_eq!(auth["repoRemote"], "https://github.com/acme/app.git");
 
         let chat = serde_json::to_value(ClientMessage::ChatSend {
             content: "hello chat".into(),

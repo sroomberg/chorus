@@ -28,6 +28,13 @@ export type ServerMessage = {
     userId: string;
     displayName?: string;
 } | {
+    type: "auth.pending";
+    userId: string;
+    message?: string;
+} | {
+    type: "auth.denied";
+    message: string;
+} | {
     type: "error";
     code: string;
     message: string;
@@ -35,7 +42,8 @@ export type ServerMessage = {
 export type ClientMessage = {
     type: "auth";
     token: string;
-    displayName?: string;
+    displayName: string;
+    repoRemote?: string;
 } | {
     type: "chat.send";
     content: string;
@@ -59,4 +67,6 @@ export type ClientMessage = {
 export declare function encodeMessage(msg: ServerMessage | ClientMessage): string;
 export declare function decodeServerMessage(raw: string): ServerMessage;
 export declare function decodeClientMessage(raw: string): ClientMessage;
+/** Non-empty trimmed display name, or null if invalid. */
+export declare function normalizeDisplayName(raw: string | undefined | null): string | null;
 //# sourceMappingURL=protocol.d.ts.map

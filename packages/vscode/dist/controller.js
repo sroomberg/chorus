@@ -1,7 +1,9 @@
 import { networkInterfaces } from "node:os";
 import * as vscode from "vscode";
 import { JoinClient, RelayServer, relayOptionsFromEnv, } from "@chorus/client";
+import { normalizeDisplayName } from "@chorus/shared";
 import { formatSessionLine, newEventId } from "./format.js";
+import { detectRepoRemote } from "./git.js";
 function getLanIp() {
     const nets = networkInterfaces();
     for (const iface of Object.values(nets)) {
@@ -14,7 +16,8 @@ function getLanIp() {
 }
 /**
  * Host/joiner controller for the VS Code adapter.
- * Speaks the same `/host` + `/ws` contracts as the OpenCode plugin.
+ * Speaks the same `/host` + `/ws` contracts as the OpenCode plugin, including
+ * session access control (approval, required name, optional repo gate).
  */
 export class ChorusController {
     output;
@@ -23,6 +26,7 @@ export class ChorusController {
     relay = null;
     joinClient = null;
     sessionId = `vscode-${Date.now().toString(36)}`;
+    pendingUsers = [];
     transcript = [];
     _onDidChange = new vscode.EventEmitter();
     onDidChange = this._onDidChange.event;
@@ -37,6 +41,9 @@ export class ChorusController {
     getTranscript() {
         return this.transcript;
     }
+    getPendingUsers() {
+        return this.pendingUsers;
+    }
     getJoinState() {
         return this.joinClient?.getState() ?? null;
     }
@@ -49,19 +56,27 @@ export class ChorusController {
             port: this.relay.getPort(),
             host: this.relay.getHost(),
             external: this.relay.isExternal(),
+            pending: this.pendingUsers.length,
         };
     }
     cfg() {
         return vscode.workspace.getConfiguration("chorus");
     }
     displayName() {
-        const configured = this.cfg().get("displayName")?.trim();
-        if (configured)
-            return configured;
-        return process.env["USER"] ?? process.env["USERNAME"] ?? "vscode";
+        const configured = this.cfg().get("displayName");
+        const normalized = normalizeDisplayName(configured);
+        if (normalized)
+            return normalized;
+        const fallback = normalizeDisplayName(process.env["USER"] ?? process.env["USERNAME"] ?? "vscode");
+        if (!fallback)
+            throw new Error("A non-empty display name is required (set chorus.displayName).");
+        return fallback;
     }
     defaultPort() {
         return this.cfg().get("port") ?? 7742;
+    }
+    requireApprovalDefault() {
+        return this.cfg().get("requireApproval") !== false;
     }
     publicJoinHost(port, relayHost, external) {
         const fromSettings = this.cfg().get("publicHost")?.trim();
@@ -92,8 +107,15 @@ export class ChorusController {
     }
     refreshStatus() {
         if (this.mode === "sharing" && this.relay) {
-            this.statusBar.text = `$(broadcast) Chorus sharing :${this.relay.getPort()} (${this.relay.clientCount})`;
+            const pending = this.pendingUsers.length;
+            this.statusBar.text = pending
+                ? `$(broadcast) Chorus sharing :${this.relay.getPort()} (${pending} pending)`
+                : `$(broadcast) Chorus sharing :${this.relay.getPort()} (${this.relay.clientCount})`;
             this.statusBar.tooltip = "Chorus is sharing — click for status";
+        }
+        else if (this.mode === "pending" && this.joinClient) {
+            this.statusBar.text = "$(watch) Chorus waiting for host approval";
+            this.statusBar.tooltip = "Connected but pending host approval";
         }
         else if (this.mode === "joined" && this.joinClient) {
             const st = this.joinClient.getState();
@@ -107,8 +129,46 @@ export class ChorusController {
         this.statusBar.command = "chorus.status";
         this._onDidChange.fire();
     }
-    async share(role = "edit") {
-        if (this.mode === "joined") {
+    ensureRelayHandlers(relay) {
+        relay.setInputHandler(async (content, userId, displayName) => {
+            const label = displayName ?? userId.slice(0, 8);
+            const labeled = `[${label}]: ${content}`;
+            const event = {
+                id: newEventId(),
+                sessionId: this.sessionId,
+                type: "user",
+                payload: labeled,
+                timestamp: Date.now(),
+            };
+            this.appendSession(event);
+            this.relay?.pushEvent(event);
+            void vscode.window.showInformationMessage(`Chorus prompt from ${label}: ${content}`);
+        });
+        relay.setChatHandler((name, content) => {
+            const text = `💬 [${name ?? "guest"}]: ${content}`;
+            this.append({ id: newEventId(), text, at: Date.now(), kind: "chat" });
+            void vscode.window.showInformationMessage(text);
+        });
+        relay.setTypingHandler((name) => {
+            this.statusBar.text = `$(edit) ${name ?? "someone"} typing…`;
+            setTimeout(() => this.refreshStatus(), 2000).unref?.();
+        });
+        relay.setUserPendingHandler((user) => {
+            this.pendingUsers = [...this.pendingUsers.filter((u) => u.userId !== user.userId), user];
+            this.appendSystem(`Join request from ${user.displayName} (${user.role}) — ${user.userId}`);
+            this.refreshStatus();
+            void vscode.window
+                .showInformationMessage(`Chorus: ${user.displayName} wants to join (${user.role}).`, "Approve", "Deny")
+                .then((choice) => {
+                if (choice === "Approve")
+                    this.approveUser(user.userId);
+                if (choice === "Deny")
+                    this.denyUser(user.userId);
+            });
+        });
+    }
+    async share(role = "edit", requireApproval) {
+        if (this.mode === "joined" || this.mode === "pending") {
             await this.leave();
         }
         const relayBin = this.cfg().get("relayBin")?.trim();
@@ -117,33 +177,18 @@ export class ChorusController {
         const { port, opts } = relayOptionsFromEnv(this.defaultPort());
         if (!this.relay) {
             this.relay = new RelayServer(port, opts);
-            this.relay.setInputHandler(async (content, userId, displayName) => {
-                const label = displayName ?? userId.slice(0, 8);
-                const labeled = `[${label}]: ${content}`;
-                const event = {
-                    id: newEventId(),
-                    sessionId: this.sessionId,
-                    type: "user",
-                    payload: labeled,
-                    timestamp: Date.now(),
-                };
-                this.appendSession(event);
-                this.relay?.pushEvent(event);
-                void vscode.window.showInformationMessage(`Chorus prompt from ${label}: ${content}`);
-            });
-            this.relay.setChatHandler((name, content) => {
-                const text = `💬 [${name ?? "guest"}]: ${content}`;
-                this.append({ id: newEventId(), text, at: Date.now(), kind: "chat" });
-                void vscode.window.showInformationMessage(text);
-            });
-            this.relay.setTypingHandler((name) => {
-                this.statusBar.text = `$(edit) ${name ?? "someone"} typing…`;
-                setTimeout(() => this.refreshStatus(), 2000).unref?.();
-            });
+            this.ensureRelayHandlers(this.relay);
         }
         if (!this.relay.isRunning) {
             await this.relay.start();
         }
+        const approval = requireApproval ?? this.requireApprovalDefault();
+        const repoRemote = detectRepoRemote();
+        this.relay.setSessionPolicy({
+            requireApproval: approval,
+            repoRemote: repoRemote ?? "",
+        });
+        this.pendingUsers = [];
         this.mode = "sharing";
         const token = await this.relay.issueToken(this.sessionId, role);
         const joinHost = this.publicJoinHost(this.relay.getPort(), this.relay.getHost(), this.relay.isExternal());
@@ -151,14 +196,40 @@ export class ChorusController {
         this.appendSystem(this.relay.isExternal()
             ? `Attached to external relay ${this.relay.getHost()}:${this.relay.getPort()}`
             : `chorus-relay started on port ${this.relay.getPort()}`);
+        this.appendSystem(approval
+            ? "Joiners wait for your approval (Chorus: Approve Joiner / Deny Joiner)."
+            : "Auto-admit is on (requireApproval=false).");
+        if (repoRemote) {
+            this.appendSystem(`Repo gate on: joiners must share origin ${repoRemote}.`);
+        }
         this.appendSystem(`Share ready (${role}). Collaborator command:\n${joinCommand}`);
         this.refreshStatus();
         await vscode.env.clipboard.writeText(joinCommand);
-        void vscode.window.showInformationMessage(`Chorus sharing — join command copied to clipboard.`, "Copy again").then((choice) => {
+        void vscode.window
+            .showInformationMessage(`Chorus sharing — join command copied to clipboard.`, "Copy again")
+            .then((choice) => {
             if (choice === "Copy again")
                 void vscode.env.clipboard.writeText(joinCommand);
         });
         return joinCommand;
+    }
+    approveUser(userId) {
+        if (!this.relay || this.mode !== "sharing") {
+            throw new Error("Share a session first to approve joiners.");
+        }
+        this.relay.approveUser(userId);
+        this.pendingUsers = this.pendingUsers.filter((u) => u.userId !== userId);
+        this.appendSystem(`Approved ${userId}`);
+        this.refreshStatus();
+    }
+    denyUser(userId) {
+        if (!this.relay || this.mode !== "sharing") {
+            throw new Error("Share a session first to deny joiners.");
+        }
+        this.relay.denyUser(userId);
+        this.pendingUsers = this.pendingUsers.filter((u) => u.userId !== userId);
+        this.appendSystem(`Denied ${userId}`);
+        this.refreshStatus();
     }
     async join(token, host, name) {
         if (this.mode === "sharing") {
@@ -168,9 +239,9 @@ export class ChorusController {
             this.joinClient.disconnect();
             this.joinClient = null;
         }
-        const displayName = name?.trim() || this.displayName();
-        const jc = new JoinClient(`ws://${host}/ws`, token, displayName);
-        await jc.connect();
+        const displayName = normalizeDisplayName(name) ?? this.displayName();
+        const repoRemote = detectRepoRemote();
+        const jc = new JoinClient(`ws://${host}/ws`, token, displayName, repoRemote);
         jc.setChatHandler((msgName, content) => {
             const text = `💬 [${msgName ?? "host"}]: ${content}`;
             this.append({ id: newEventId(), text, at: Date.now(), kind: "chat" });
@@ -181,24 +252,41 @@ export class ChorusController {
             setTimeout(() => this.refreshStatus(), 2000).unref?.();
         });
         jc.setEventHandler((event) => this.appendSession(event));
+        jc.setPendingHandler((userId) => {
+            this.mode = "pending";
+            this.appendSystem(`Waiting for host approval (userId=${userId})`);
+            this.refreshStatus();
+            void vscode.window.showInformationMessage("Chorus: waiting for the host to approve your join.");
+        });
+        jc.setApprovedHandler(() => {
+            this.mode = "joined";
+            this.appendSystem("Host approved — you are in the session.");
+            this.refreshStatus();
+            void vscode.window.showInformationMessage("Chorus: host approved your join.");
+        });
+        await jc.connect();
         for (const event of jc.getState().recentEvents) {
             this.appendSession(event);
         }
         this.joinClient = jc;
-        this.mode = "joined";
-        this.appendSystem(`Joined ${host} as ${displayName}`);
+        const st = jc.getState().status;
+        this.mode = st === "pending" ? "pending" : "joined";
+        this.appendSystem(st === "pending"
+            ? `Connected to ${host} as ${displayName} — pending approval`
+            : `Joined ${host} as ${displayName}`);
         this.refreshStatus();
     }
     async leave() {
         this.joinClient?.disconnect();
         this.joinClient = null;
-        if (this.mode === "joined")
+        if (this.mode === "joined" || this.mode === "pending")
             this.mode = "idle";
         this.appendSystem("Left shared session");
         this.refreshStatus();
     }
     stop() {
         this.mode = "idle";
+        this.pendingUsers = [];
         this.relay?.stop();
         this.relay = null;
         this.appendSystem("Stopped sharing");
@@ -226,12 +314,18 @@ export class ChorusController {
             });
             return;
         }
+        if (this.mode === "pending") {
+            throw new Error("Still waiting for host approval — chat is blocked until then.");
+        }
         throw new Error("Not currently sharing or joined.");
     }
     /** Joiner → host collab.input */
     sendPrompt(content) {
-        if (this.mode !== "joined" || !this.joinClient) {
+        if (!this.joinClient) {
             throw new Error("Join a session first to send prompts to the host.");
+        }
+        if (this.joinClient.getState().status !== "connected") {
+            throw new Error("Cannot send prompts while pending host approval.");
         }
         this.joinClient.sendInput(content);
         this.appendSystem(`→ sent prompt to host (${content.slice(0, 80)}${content.length > 80 ? "…" : ""})`);
@@ -256,7 +350,7 @@ export class ChorusController {
         const join = this.joinClient
             ? { joined: true, ...this.joinClient.getState() }
             : { joined: false };
-        return JSON.stringify({ mode: this.mode, ...share, ...join }, null, 2);
+        return JSON.stringify({ mode: this.mode, pendingUsers: this.pendingUsers, ...share, ...join }, null, 2);
     }
     dispose() {
         this.joinClient?.disconnect();

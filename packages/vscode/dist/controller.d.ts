@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { type JoinState } from "@chorus/client";
-import type { UserRole } from "@chorus/shared";
-export type ChorusMode = "idle" | "sharing" | "joined";
+import type { ConnectedUser, UserRole } from "@chorus/shared";
+export type ChorusMode = "idle" | "sharing" | "joined" | "pending";
 export type TranscriptLine = {
     id: string;
     text: string;
@@ -10,7 +10,8 @@ export type TranscriptLine = {
 };
 /**
  * Host/joiner controller for the VS Code adapter.
- * Speaks the same `/host` + `/ws` contracts as the OpenCode plugin.
+ * Speaks the same `/host` + `/ws` contracts as the OpenCode plugin, including
+ * session access control (approval, required name, optional repo gate).
  */
 export declare class ChorusController {
     private readonly output;
@@ -19,12 +20,14 @@ export declare class ChorusController {
     private relay;
     private joinClient;
     private sessionId;
+    private pendingUsers;
     private readonly transcript;
     private readonly _onDidChange;
     readonly onDidChange: vscode.Event<void>;
     constructor(output: vscode.OutputChannel, statusBar: vscode.StatusBarItem);
     getMode(): ChorusMode;
     getTranscript(): readonly TranscriptLine[];
+    getPendingUsers(): readonly ConnectedUser[];
     getJoinState(): JoinState | null;
     getShareSummary(): {
         sharing: boolean;
@@ -32,16 +35,21 @@ export declare class ChorusController {
         port?: number;
         host?: string;
         external?: boolean;
+        pending?: number;
     };
     private cfg;
     private displayName;
     private defaultPort;
+    private requireApprovalDefault;
     private publicJoinHost;
     private append;
     private appendSystem;
     private appendSession;
     private refreshStatus;
-    share(role?: UserRole): Promise<string>;
+    private ensureRelayHandlers;
+    share(role?: UserRole, requireApproval?: boolean): Promise<string>;
+    approveUser(userId: string): void;
+    denyUser(userId: string): void;
     join(token: string, host: string, name?: string): Promise<void>;
     leave(): Promise<void>;
     stop(): void;

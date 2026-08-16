@@ -1,4 +1,4 @@
-use crate::protocol::{ConnectedUser, SessionToken, UserRole};
+use crate::protocol::{ConnectedUser, SessionToken, UserRole, UserStatus};
 use rand::RngCore;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -72,13 +72,15 @@ impl AccessManager {
         &mut self,
         user_id: String,
         role: UserRole,
-        display_name: Option<String>,
+        display_name: String,
+        status: UserStatus,
     ) -> ConnectedUser {
         let user = ConnectedUser {
             user_id: user_id.clone(),
             role,
             joined_at: now_ms(),
             display_name,
+            status,
         };
         self.users.insert(user_id, user.clone());
         user
@@ -101,21 +103,53 @@ impl AccessManager {
         }
     }
 
+    pub fn approve(&mut self, user_id: &str) -> Option<ConnectedUser> {
+        let user = self.users.get_mut(user_id)?;
+        if user.status != UserStatus::Pending {
+            return None;
+        }
+        user.status = UserStatus::Active;
+        Some(user.clone())
+    }
+
+    pub fn is_pending(&self, user_id: &str) -> bool {
+        matches!(
+            self.users.get(user_id).map(|u| &u.status),
+            Some(UserStatus::Pending)
+        )
+    }
+
+    pub fn is_active(&self, user_id: &str) -> bool {
+        matches!(
+            self.users.get(user_id).map(|u| &u.status),
+            Some(UserStatus::Active)
+        )
+    }
+
     pub fn list_users(&self) -> Vec<ConnectedUser> {
         self.users.values().cloned().collect()
     }
 
+    pub fn list_active_users(&self) -> Vec<ConnectedUser> {
+        self.users
+            .values()
+            .filter(|u| u.status == UserStatus::Active)
+            .cloned()
+            .collect()
+    }
+
     pub fn is_admin(&self, user_id: &str) -> bool {
         matches!(
-            self.users.get(user_id).map(|u| &u.role),
-            Some(UserRole::Admin)
+            self.users.get(user_id).map(|u| (&u.role, &u.status)),
+            Some((UserRole::Admin, UserStatus::Active))
         )
     }
 
     pub fn can_send_input(&self, user_id: &str) -> bool {
         matches!(
-            self.users.get(user_id).map(|u| &u.role),
-            Some(UserRole::Admin) | Some(UserRole::Edit)
+            self.users.get(user_id).map(|u| (&u.role, &u.status)),
+            Some((UserRole::Admin, UserStatus::Active))
+                | Some((UserRole::Edit, UserStatus::Active))
         )
     }
 
@@ -178,13 +212,31 @@ mod tests {
     #[test]
     fn roles_and_input_permissions() {
         let mut mgr = AccessManager::new();
-        let admin = mgr.add_user("a".into(), UserRole::Admin, Some("A".into()));
-        let editor = mgr.add_user("e".into(), UserRole::Edit, None);
-        let viewer = mgr.add_user("v".into(), UserRole::View, None);
+        let admin = mgr.add_user(
+            "a".into(),
+            UserRole::Admin,
+            "A".into(),
+            UserStatus::Active,
+        );
+        let editor = mgr.add_user("e".into(), UserRole::Edit, "E".into(), UserStatus::Active);
+        let viewer = mgr.add_user("v".into(), UserRole::View, "V".into(), UserStatus::Active);
+        let pending = mgr.add_user("p".into(), UserRole::Edit, "P".into(), UserStatus::Pending);
         assert!(mgr.is_admin(&admin.user_id));
         assert!(mgr.can_send_input(&editor.user_id));
         assert!(!mgr.can_send_input(&viewer.user_id));
+        assert!(!mgr.can_send_input(&pending.user_id));
         assert!(mgr.set_role("v", UserRole::Edit));
         assert!(mgr.can_send_input("v"));
+    }
+
+    #[test]
+    fn approve_promotes_pending() {
+        let mut mgr = AccessManager::new();
+        mgr.add_user("p".into(), UserRole::Edit, "Pat".into(), UserStatus::Pending);
+        assert!(mgr.is_pending("p"));
+        let user = mgr.approve("p").unwrap();
+        assert_eq!(user.status, UserStatus::Active);
+        assert!(mgr.is_active("p"));
+        assert!(mgr.can_send_input("p"));
     }
 }

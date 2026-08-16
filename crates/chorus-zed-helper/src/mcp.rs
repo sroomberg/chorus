@@ -92,10 +92,14 @@ fn tool_defs() -> Vec<Value> {
                     "token": { "type": "string", "description": "Join token from the host" },
                     "display_name": {
                         "type": "string",
-                        "description": "Display name shown to collaborators (default: Zed)"
+                        "description": "Required display name shown to collaborators"
+                    },
+                    "repo_remote": {
+                        "type": "string",
+                        "description": "Optional git remote URL when the host enabled a same-repo gate"
                     }
                 },
-                "required": ["host", "token"]
+                "required": ["host", "token", "display_name"]
             }
         }),
         json!({
@@ -153,10 +157,18 @@ async fn call_tool(
             let display_name = args
                 .get("display_name")
                 .and_then(|v| v.as_str())
-                .unwrap_or("Zed")
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or("display_name is required and must be non-empty")?
                 .to_string();
+            let repo_remote = args
+                .get("repo_remote")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
 
-            let client = JoinClient::connect(&host, &token, &display_name).await?;
+            let client =
+                JoinClient::connect(&host, &token, &display_name, repo_remote).await?;
             let snap = client.snapshot().await;
             let mut guard = session.lock().await;
             if let Some(old) = guard.client.take() {
@@ -240,8 +252,10 @@ pub fn format_status(snap: &crate::client::SessionSnapshot) -> String {
     } else {
         out.push('\n');
         for u in &snap.users {
-            let name = u.display_name.as_deref().unwrap_or("(anonymous)");
-            out.push_str(&format!("  - {} [{}] {:?}\n", name, u.user_id, u.role));
+            out.push_str(&format!(
+                "  - {} [{}] {:?} ({:?})\n",
+                u.display_name, u.user_id, u.role, u.status
+            ));
         }
     }
     out.push_str(&format!(
@@ -249,7 +263,7 @@ pub fn format_status(snap: &crate::client::SessionSnapshot) -> String {
         snap.recent_events.len(),
         snap.recent_chat.len()
     ));
-    if snap.status == JoinStatus::Connected {
+    if snap.status == JoinStatus::Connected || snap.status == JoinStatus::Pending {
         for chat in snap.recent_chat.iter().rev().take(5).collect::<Vec<_>>().into_iter().rev()
         {
             let name = chat.display_name.as_deref().unwrap_or(&chat.user_id);

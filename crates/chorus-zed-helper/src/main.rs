@@ -35,9 +35,12 @@ enum Commands {
         /// Join token from the host share command
         #[arg(long)]
         token: String,
-        /// Display name shown to collaborators
+        /// Display name shown to collaborators (required non-empty)
         #[arg(long, default_value = "Zed", env = "CHORUS_DISPLAY_NAME")]
         name: String,
+        /// Optional git remote when the host enabled a same-repo gate
+        #[arg(long, env = "CHORUS_REPO_REMOTE")]
+        repo_remote: Option<String>,
     },
     /// Disconnect from the current session
     Leave,
@@ -71,12 +74,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .await
                 .map_err(|e| e.to_string())??;
         }
-        Commands::Join { host, token, name } => {
+        Commands::Join {
+            host,
+            token,
+            name,
+            repo_remote,
+        } => {
             ensure_daemon().await?;
             let resp = request(ControlRequest::Join {
                 host,
                 token,
                 display_name: name,
+                repo_remote,
             })
             .await?;
             print_response(&resp);
@@ -274,18 +283,28 @@ async fn handle_control(
             host,
             token,
             display_name,
-        } => match JoinClient::connect(&host, &token, &display_name).await {
-            Ok(client) => {
-                let snap = client.snapshot().await;
-                let mut guard = session.lock().await;
-                if let Some(old) = guard.take() {
-                    old.disconnect().await;
+            repo_remote,
+        } => {
+            match JoinClient::connect(
+                &host,
+                &token,
+                &display_name,
+                repo_remote.as_deref(),
+            )
+            .await
+            {
+                Ok(client) => {
+                    let snap = client.snapshot().await;
+                    let mut guard = session.lock().await;
+                    if let Some(old) = guard.take() {
+                        old.disconnect().await;
+                    }
+                    *guard = Some(client);
+                    (ControlResponse::ok_status(snap), false)
                 }
-                *guard = Some(client);
-                (ControlResponse::ok_status(snap), false)
+                Err(e) => (ControlResponse::err(e), false),
             }
-            Err(e) => (ControlResponse::err(e), false),
-        },
+        }
         ControlRequest::Leave => {
             let mut guard = session.lock().await;
             if let Some(client) = guard.take() {

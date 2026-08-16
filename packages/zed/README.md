@@ -20,6 +20,14 @@ Zed extensions run as `wasm32-wasip2` and cannot hold long-lived WebSocket UIs t
 - **OpenCode transcript mirroring** — session events are visible via `chorus_status` / helper state, not injected into a local agent transcript.
 - **Extension slash commands** — Zed removed extension slash commands; use MCP tools (or the CLI). Tool names mirror OpenCode’s `/chorus-join`, `/chorus-leave`, `/chorus-chat`, `/chorus-status`.
 
+## Access control
+
+Aligned with the OpenCode plugin / `chorus-relay` session gates:
+
+- **Required display name** (`display_name` / `--name`)
+- **Host approval** — join may return `pending` until the host runs `chorus-approve`
+- **Optional repo gate** — pass `repo_remote` / `--repo-remote` when the host bound `session.policy.repoRemote`
+
 ## Architecture
 
 ```

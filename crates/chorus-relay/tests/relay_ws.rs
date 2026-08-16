@@ -119,7 +119,8 @@ async fn join_authed(port: u16, token: String) -> WsStream {
     ws.send(Message::Text(
         serde_json::to_string(&ClientMessage::Auth {
             token,
-            display_name: Some("joiner".into()),
+            display_name: "joiner".into(),
+            repo_remote: None,
         })
         .unwrap()
         .into(),
@@ -148,7 +149,8 @@ async fn rejects_invalid_joiner_token() {
     ws.send(Message::Text(
         serde_json::to_string(&ClientMessage::Auth {
             token: "bad".into(),
-            display_name: None,
+            display_name: "X".into(),
+            repo_remote: None,
         })
         .unwrap()
         .into(),
@@ -192,7 +194,8 @@ async fn accepts_valid_token_and_sends_history() {
     ws.send(Message::Text(
         serde_json::to_string(&ClientMessage::Auth {
             token,
-            display_name: Some("Alice".into()),
+            display_name: "Alice".into(),
+            repo_remote: None,
         })
         .unwrap()
         .into(),
@@ -281,4 +284,157 @@ async fn forwards_collab_input_to_host() {
         RelayToHost::CollabInput { content, .. } => assert_eq!(content, "refactor this"),
         _ => unreachable!(),
     }
+}
+
+#[tokio::test]
+async fn requires_display_name() {
+    let port = 18746;
+    start_relay(port, "secret").await;
+    let mut host = connect_host(port, "secret").await;
+    let token = issue_token(&mut host, UserRole::Edit).await;
+
+    let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}/ws"))
+        .await
+        .unwrap();
+    ws.send(Message::Text(
+        serde_json::to_string(&ClientMessage::Auth {
+            token,
+            display_name: "   ".into(),
+            repo_remote: None,
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    let mut saw_name = false;
+    let mut close_code = None;
+    while let Some(Ok(msg)) = ws.next().await {
+        match msg {
+            Message::Text(t) => {
+                if let Ok(ServerMessage::Error { code, .. }) = serde_json::from_str(&t) {
+                    if code == "NAME_REQUIRED" {
+                        saw_name = true;
+                    }
+                }
+            }
+            Message::Close(frame) => {
+                close_code = frame.map(|f| u16::from(f.code));
+                break;
+            }
+            _ => {}
+        }
+    }
+    assert!(saw_name || close_code == Some(4002));
+}
+
+#[tokio::test]
+async fn pending_until_host_approves() {
+    let port = 18747;
+    start_relay(port, "secret").await;
+    let mut host = connect_host(port, "secret").await;
+
+    host.send(Message::Text(
+        serde_json::to_string(&HostToRelay::SessionPolicy {
+            require_approval: Some(true),
+            repo_remote: None,
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    let token = issue_token(&mut host, UserRole::Edit).await;
+    let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}/ws"))
+        .await
+        .unwrap();
+    ws.send(Message::Text(
+        serde_json::to_string(&ClientMessage::Auth {
+            token,
+            display_name: "Pat".into(),
+            repo_remote: None,
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    let pending = wait_for_server(&mut ws, |m| matches!(m, ServerMessage::AuthPending { .. })).await;
+    let user_id = match pending {
+        ServerMessage::AuthPending { user_id, .. } => user_id,
+        _ => unreachable!(),
+    };
+
+    let host_pending =
+        wait_for_host(&mut host, |m| matches!(m, RelayToHost::UserPending { .. })).await;
+    assert!(matches!(host_pending, RelayToHost::UserPending { .. }));
+
+    host.send(Message::Text(
+        serde_json::to_string(&HostToRelay::HostApprove {
+            user_id: user_id.clone(),
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    let _ = wait_for_server(&mut ws, |m| matches!(m, ServerMessage::SessionHistory { .. })).await;
+}
+
+#[tokio::test]
+async fn rejects_mismatched_repo_remote() {
+    let port = 18748;
+    start_relay(port, "secret").await;
+    let mut host = connect_host(port, "secret").await;
+
+    host.send(Message::Text(
+        serde_json::to_string(&HostToRelay::SessionPolicy {
+            require_approval: Some(false),
+            repo_remote: Some("https://github.com/acme/app.git".into()),
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    let token = issue_token(&mut host, UserRole::Edit).await;
+    let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}/ws"))
+        .await
+        .unwrap();
+    ws.send(Message::Text(
+        serde_json::to_string(&ClientMessage::Auth {
+            token,
+            display_name: "Eve".into(),
+            repo_remote: Some("https://github.com/other/repo.git".into()),
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    let mut saw = false;
+    let mut close_code = None;
+    while let Some(Ok(msg)) = ws.next().await {
+        match msg {
+            Message::Text(t) => {
+                if let Ok(ServerMessage::Error { code, .. }) = serde_json::from_str(&t) {
+                    if code == "REPO_ACCESS_DENIED" {
+                        saw = true;
+                    }
+                }
+            }
+            Message::Close(frame) => {
+                close_code = frame.map(|f| u16::from(f.code));
+                break;
+            }
+            _ => {}
+        }
+    }
+    assert!(saw || close_code == Some(4004));
 }
