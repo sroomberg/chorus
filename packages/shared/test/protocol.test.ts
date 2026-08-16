@@ -26,9 +26,30 @@ describe("encodeMessage / decodeServerMessage", () => {
     const msg: ServerMessage = {
       type: "user.list",
       users: [
-        { userId: "u1", role: "admin", joinedAt: 1000 },
-        { userId: "u2", role: "view", joinedAt: 1001 },
+        {
+          userId: "u1",
+          role: "admin",
+          joinedAt: 1000,
+          displayName: "Host",
+          status: "active",
+        },
+        {
+          userId: "u2",
+          role: "view",
+          joinedAt: 1001,
+          displayName: "Bob",
+          status: "active",
+        },
       ],
+    };
+    expect(decodeServerMessage(encodeMessage(msg))).toEqual(msg);
+  });
+
+  it("round-trips auth.pending", () => {
+    const msg: ServerMessage = {
+      type: "auth.pending",
+      userId: "u2",
+      message: "Waiting for host approval",
     };
     expect(decodeServerMessage(encodeMessage(msg))).toEqual(msg);
   });
