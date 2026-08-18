@@ -19,6 +19,7 @@ Field names on the wire are **camelCase** (`sessionId`, `userId`, `displayName`,
 
 - Joiner `auth` requires a non-empty `displayName`.
 - Optional `repoRemote` on `auth` is compared (normalized) to host `session.policy.repoRemote` when set.
+- Host config can extend normalization via `session.policy.additionalRepoRemotePrefixes` and `session.policy.repoRemoteRewrites`.
 - When `session.policy.requireApproval` is true, joiners receive `auth.pending` until the host sends `host.approve` / `host.deny`.
 
 ## Changing the protocol
