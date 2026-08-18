@@ -124,6 +124,18 @@ export function resolveRequireApproval(security, toolArg) {
 export function resolveDefaultRole(security, toolArg) {
     return toolArg ?? security.defaultRole;
 }
+/** Trim and strip a leading @ from configured company email domains. */
+export function normalizeAllowedEmailDomain(raw) {
+    const domain = raw?.trim().replace(/^@/, "").toLowerCase();
+    return domain || undefined;
+}
+/** Domain enforced on join when configured or when requireEmailDomainMatch is locked on. */
+export function resolveAllowedEmailDomain(security) {
+    return normalizeAllowedEmailDomain(security.allowedEmailDomain);
+}
+export function emailDomainGateEnabled(security) {
+    return security.requireEmailDomainMatch || resolveAllowedEmailDomain(security) !== undefined;
+}
 /** Parse a raw object (tests / programmatic use) without filesystem. */
 export function parseChorusConfig(raw) {
     return chorusConfigSchema.parse(raw);
