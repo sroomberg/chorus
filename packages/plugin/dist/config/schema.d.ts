@@ -9,11 +9,13 @@ export declare const chorusSecurityConfigSchema: z.ZodObject<{
     requireApproval: z.ZodDefault<z.ZodBoolean>;
     allowSkipApproval: z.ZodDefault<z.ZodBoolean>;
     requireRepoMatch: z.ZodDefault<z.ZodBoolean>;
+    requireEmailDomainMatch: z.ZodDefault<z.ZodBoolean>;
     defaultRole: z.ZodDefault<z.ZodEnum<{
         admin: "admin";
         edit: "edit";
         view: "view";
     }>>;
+    allowedEmailDomain: z.ZodOptional<z.ZodString>;
     tokenTtlMs: z.ZodOptional<z.ZodNumber>;
 }, z.core.$strict>;
 export declare const chorusRelayConfigSchema: z.ZodObject<{
@@ -41,11 +43,13 @@ export declare const chorusConfigSchema: z.ZodObject<{
         requireApproval: z.ZodDefault<z.ZodBoolean>;
         allowSkipApproval: z.ZodDefault<z.ZodBoolean>;
         requireRepoMatch: z.ZodDefault<z.ZodBoolean>;
+        requireEmailDomainMatch: z.ZodDefault<z.ZodBoolean>;
         defaultRole: z.ZodDefault<z.ZodEnum<{
             admin: "admin";
             edit: "edit";
             view: "view";
         }>>;
+        allowedEmailDomain: z.ZodOptional<z.ZodString>;
         tokenTtlMs: z.ZodOptional<z.ZodNumber>;
     }, z.core.$strict>>;
     relay: z.ZodDefault<z.ZodObject<{

@@ -4,6 +4,7 @@ export class JoinClient {
     token;
     displayName;
     repoRemote;
+    email;
     ws = null;
     state;
     onEvent;
@@ -11,11 +12,12 @@ export class JoinClient {
     onTyping;
     onPending;
     onApproved;
-    constructor(relayUrl, token, displayName, repoRemote) {
+    constructor(relayUrl, token, displayName, repoRemote, email) {
         this.relayUrl = relayUrl;
         this.token = token;
         this.displayName = displayName;
         this.repoRemote = repoRemote;
+        this.email = email;
         this.state = {
             status: "connecting",
             sessionId: "",
@@ -48,6 +50,8 @@ export class JoinClient {
                 };
                 if (this.repoRemote)
                     auth.repoRemote = this.repoRemote;
+                if (this.email)
+                    auth.email = this.email;
                 ws.send(encodeMessage(auth));
             };
             ws.onmessage = (ev) => {
