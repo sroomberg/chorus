@@ -9,6 +9,8 @@
     "requireRepoMatch": true,
     "requireEmailDomainMatch": true,
     "allowedEmailDomain": "acme.com",
+    "additionalRepoRemotePrefixes": ["git://"],
+    "repoRemoteRewrites": [{ "from": "github.acme.com", "to": "github.com" }],
     "defaultRole": "edit",
     "tokenTtlMs": 86400000
   },

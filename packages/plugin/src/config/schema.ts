@@ -8,6 +8,8 @@ const securityDefaults = {
   allowSkipApproval: true,
   requireRepoMatch: false,
   requireEmailDomainMatch: false,
+  additionalRepoRemotePrefixes: [] as string[],
+  repoRemoteRewrites: [] as Array<{ from: string; to: string }>,
   defaultRole: "edit" as const,
 };
 
@@ -36,6 +38,29 @@ export const chorusSecurityConfigSchema = z
     defaultRole: chorusRoleSchema.default(securityDefaults.defaultRole),
     /** Company email domain for joiners (e.g. acme.com). Required when requireEmailDomainMatch is true. */
     allowedEmailDomain: z.string().min(1).optional(),
+    /**
+     * Extra git remote URL prefixes to strip when comparing remotes
+     * (built-in: https://, ssh://, git@, …). Example: ["git://", "org-git://"].
+     */
+    additionalRepoRemotePrefixes: z
+      .array(z.string().min(1).max(64))
+      .max(32)
+      .default([]),
+    /**
+     * Host substitutions after prefix stripping so internal clones match origin.
+     * Example: [{ "from": "github.acme.com", "to": "github.com" }].
+     */
+    repoRemoteRewrites: z
+      .array(
+        z
+          .object({
+            from: z.string().min(1).max(253),
+            to: z.string().min(1).max(253),
+          })
+          .strict()
+      )
+      .max(32)
+      .default([]),
     /** Optional TTL for join tokens (ms). Omit for non-expiring tokens. */
     tokenTtlMs: z.number().int().positive().optional(),
   })

@@ -166,6 +166,36 @@ describe("RelayServer (Rust)", () => {
     ws.close();
   });
 
+  it("accepts custom git remote prefixes and host rewrites", async () => {
+    relay.setSessionPolicy({
+      requireApproval: false,
+      repoRemote: "https://github.com/acme/app.git",
+      additionalRepoRemotePrefixes: ["git://"],
+      repoRemoteRewrites: [{ from: "github.acme.com", to: "github.com" }],
+    });
+    const token = (await relay.issueToken("sess-1")).token;
+    const ws = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+    const messages: ServerMessage[] = [];
+    await new Promise<void>((resolve, reject) => {
+      ws.onopen = () => {
+        ws.send(
+          encodeMessage({
+            type: "auth",
+            token,
+            displayName: "Dev",
+            repoRemote: "git://github.acme.com/acme/app.git",
+          })
+        );
+        resolve();
+      };
+      ws.onerror = reject;
+    });
+    ws.onmessage = (ev) => messages.push(decodeServerMessage(ev.data as string));
+    await waitFor(() => (messages.find((m) => m.type === "user.list") ? true : undefined));
+    expect(messages.some((m) => m.type === "session.history")).toBe(true);
+    ws.close();
+  });
+
   it("broadcasts session events to all connected clients", async () => {
     const t1 = (await relay.issueToken("sess-1")).token;
     const t2 = (await relay.issueToken("sess-1")).token;

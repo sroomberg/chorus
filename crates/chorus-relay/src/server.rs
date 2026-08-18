@@ -1,8 +1,8 @@
 use crate::access::AccessManager;
 use crate::protocol::{
-    normalize_display_name, normalize_email, normalize_repo_remote, email_matches_domain,
-    ChatMessage, ClientMessage, HostToRelay,
-    RelayToHost, ServerMessage, SessionPolicy, UserRole, UserStatus,
+    email_matches_domain, normalize_display_name, normalize_email, sanitize_repo_remote_prefixes,
+    sanitize_repo_remote_rewrites, ChatMessage, ClientMessage, HostToRelay, RelayToHost,
+    ServerMessage, SessionPolicy, UserRole, UserStatus,
 };
 use crate::state::{ClientTx, HostTx, RelayState, SharedState};
 use axum::extract::ws::{Message, WebSocket};
@@ -183,7 +183,7 @@ async fn handle_joiner(socket: WebSocket, state: SharedState) {
                 if let Some(ref expected) = guard.policy.repo_remote {
                     let provided = repo_remote
                         .as_deref()
-                        .map(normalize_repo_remote)
+                        .map(|raw| guard.policy.normalize_remote(raw))
                         .filter(|s| !s.is_empty());
                     if provided.as_ref() != Some(expected) {
                         let _ = tx.send(text_msg(&ServerMessage::Error {
@@ -527,13 +527,22 @@ async fn handle_host(socket: WebSocket, state: SharedState, host_token: Arc<Stri
                 require_approval,
                 repo_remote,
                 allowed_email_domain,
+                additional_repo_remote_prefixes,
+                repo_remote_rewrites,
             } => {
                 let mut guard = state.write().await;
                 if let Some(v) = require_approval {
                     guard.policy.require_approval = v;
                 }
+                if let Some(prefixes) = additional_repo_remote_prefixes {
+                    guard.policy.additional_repo_remote_prefixes =
+                        sanitize_repo_remote_prefixes(&prefixes);
+                }
+                if let Some(rewrites) = repo_remote_rewrites {
+                    guard.policy.repo_remote_rewrites = sanitize_repo_remote_rewrites(&rewrites);
+                }
                 if let Some(raw) = repo_remote {
-                    let normalized = normalize_repo_remote(&raw);
+                    let normalized = guard.policy.normalize_remote(&raw);
                     guard.policy.repo_remote = if normalized.is_empty() {
                         None
                     } else {

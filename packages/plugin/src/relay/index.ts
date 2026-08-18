@@ -316,6 +316,8 @@ export class RelayServer {
     requireApproval?: boolean;
     repoRemote?: string | null;
     allowedEmailDomain?: string | null;
+    additionalRepoRemotePrefixes?: string[] | null;
+    repoRemoteRewrites?: { from: string; to: string }[] | null;
   }): void {
     this.send({
       type: "session.policy",
@@ -323,6 +325,8 @@ export class RelayServer {
       repoRemote: opts.repoRemote === null ? "" : opts.repoRemote,
       allowedEmailDomain:
         opts.allowedEmailDomain === null ? "" : opts.allowedEmailDomain,
+      additionalRepoRemotePrefixes: opts.additionalRepoRemotePrefixes ?? undefined,
+      repoRemoteRewrites: opts.repoRemoteRewrites ?? undefined,
     });
   }
 

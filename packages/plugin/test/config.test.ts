@@ -20,6 +20,8 @@ describe("parseChorusConfig", () => {
     expect(cfg.security.allowSkipApproval).toBe(true);
     expect(cfg.security.requireRepoMatch).toBe(false);
     expect(cfg.security.requireEmailDomainMatch).toBe(false);
+    expect(cfg.security.additionalRepoRemotePrefixes).toEqual([]);
+    expect(cfg.security.repoRemoteRewrites).toEqual([]);
     expect(cfg.security.defaultRole).toBe("edit");
   });
 
@@ -32,6 +34,8 @@ describe("parseChorusConfig", () => {
         requireRepoMatch: true,
         requireEmailDomainMatch: true,
         allowedEmailDomain: "acme.com",
+        additionalRepoRemotePrefixes: ["git://"],
+        repoRemoteRewrites: [{ from: "github.acme.com", to: "github.com" }],
         defaultRole: "view",
         tokenTtlMs: 3600000,
       },
@@ -41,6 +45,10 @@ describe("parseChorusConfig", () => {
     expect(cfg.security.requireRepoMatch).toBe(true);
     expect(cfg.security.requireEmailDomainMatch).toBe(true);
     expect(cfg.security.allowedEmailDomain).toBe("acme.com");
+    expect(cfg.security.additionalRepoRemotePrefixes).toEqual(["git://"]);
+    expect(cfg.security.repoRemoteRewrites).toEqual([
+      { from: "github.acme.com", to: "github.com" },
+    ]);
     expect(cfg.security.defaultRole).toBe("view");
     expect(cfg.security.tokenTtlMs).toBe(3600000);
   });
