@@ -29,6 +29,24 @@ describe("JoinClient (via Rust relay)", () => {
     jc.disconnect();
   });
 
+  it("resolves as pending when approval is required", async () => {
+    relay.setSessionPolicy({ requireApproval: true });
+    const pendingIds: string[] = [];
+    relay.setUserPendingHandler((u) => pendingIds.push(u.userId));
+
+    const token = (await relay.issueToken("sess-1", "edit")).token;
+    const jc = new JoinClient(`ws://localhost:${TEST_PORT}/ws`, token, "Bob");
+    await jc.connect();
+    expect(jc.getState().status).toBe("pending");
+
+    await new Promise<void>((resolve) => {
+      jc.setApprovedHandler(() => resolve());
+      relay.approveUser(pendingIds[0] ?? jc.getState().userId!);
+    });
+    expect(jc.getState().status).toBe("connected");
+    jc.disconnect();
+  });
+
   it("receives session history on connect", async () => {
     relay.pushEvent({
       id: "e1",
@@ -92,6 +110,23 @@ describe("JoinClient (via Rust relay)", () => {
     jc.sendInput("refactor this function");
     await new Promise((r) => setTimeout(r, 80));
     expect(received).toContain("refactor this function");
+    jc.disconnect();
+  });
+
+  it("blocks collab input while pending", async () => {
+    relay.setSessionPolicy({ requireApproval: true });
+    const received: string[] = [];
+    relay.setInputHandler(async (content) => {
+      received.push(content);
+    });
+
+    const token = (await relay.issueToken("sess-1", "edit")).token;
+    const jc = new JoinClient(`ws://localhost:${TEST_PORT}/ws`, token, "Dev");
+    await jc.connect();
+    expect(jc.getState().status).toBe("pending");
+    jc.sendInput("should not land");
+    await new Promise((r) => setTimeout(r, 80));
+    expect(received).toHaveLength(0);
     jc.disconnect();
   });
 });

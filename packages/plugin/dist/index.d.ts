@@ -88,9 +88,11 @@ export default function chorusPlugin(input: PluginInput): Promise<{
                     edit: "edit";
                     view: "view";
                 }>>;
+                requireApproval: z.ZodOptional<z.ZodBoolean>;
             };
             execute(args: {
                 role?: "edit" | "view" | "admin";
+                requireApproval?: boolean;
             }, context: ToolContext): Promise<string>;
         };
         "chorus-join": {
@@ -98,13 +100,42 @@ export default function chorusPlugin(input: PluginInput): Promise<{
             args: {
                 token: z.ZodString;
                 host: z.ZodString;
-                name: z.ZodOptional<z.ZodString>;
+                name: z.ZodString;
+                email: z.ZodOptional<z.ZodString>;
             };
             execute(args: {
                 token: string;
                 host: string;
-                name?: string;
+                name: string;
+                email?: string;
             }, context: ToolContext): Promise<string>;
+        };
+        "chorus-approve": {
+            description: string;
+            args: {
+                userId: z.ZodString;
+            };
+            execute(args: {
+                userId: string;
+            }): Promise<string>;
+        };
+        "chorus-deny": {
+            description: string;
+            args: {
+                userId: z.ZodString;
+            };
+            execute(args: {
+                userId: string;
+            }): Promise<string>;
+        };
+        "chorus-kick": {
+            description: string;
+            args: {
+                userId: z.ZodString;
+            };
+            execute(args: {
+                userId: string;
+            }): Promise<string>;
         };
         "chorus-leave": {
             description: string;
@@ -123,7 +154,7 @@ export default function chorusPlugin(input: PluginInput): Promise<{
         "chorus-status": {
             description: string;
             args: {};
-            execute(): Promise<string>;
+            execute(_args: Record<string, never>, context: ToolContext): Promise<string>;
         };
         "chorus-stop": {
             description: string;

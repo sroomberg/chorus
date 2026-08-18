@@ -5,11 +5,12 @@ import {
   type ServerMessage,
 } from "@chorus/shared";
 
-export type JoinStatus = "connecting" | "connected" | "disconnected" | "error";
+export type JoinStatus = "connecting" | "pending" | "connected" | "disconnected" | "error";
 
 export interface JoinState {
   status: JoinStatus;
   sessionId: string;
+  userId?: string;
   users: ConnectedUser[];
   recentEvents: SessionEvent[];
   error?: string;
@@ -21,11 +22,15 @@ export class JoinClient {
   private onEvent?: (event: SessionEvent) => void;
   private onChatMessage?: (displayName: string | undefined, content: string) => void;
   private onTyping?: (displayName: string | undefined) => void;
+  private onPending?: (userId: string) => void;
+  private onApproved?: () => void;
 
   constructor(
     private readonly relayUrl: string,
     private readonly token: string,
-    private readonly displayName: string
+    private readonly displayName: string,
+    private readonly repoRemote?: string,
+    private readonly email?: string
   ) {
     this.state = {
       status: "connecting",
@@ -39,9 +44,35 @@ export class JoinClient {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(this.relayUrl);
       this.ws = ws;
+      let settled = false;
+
+      const succeed = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+
+      const fail = (err: Error) => {
+        if (settled) return;
+        settled = true;
+        reject(err);
+      };
 
       ws.onopen = () => {
-        ws.send(encodeMessage({ type: "auth", token: this.token, displayName: this.displayName }));
+        const auth: {
+          type: "auth";
+          token: string;
+          displayName: string;
+          repoRemote?: string;
+          email?: string;
+        } = {
+          type: "auth",
+          token: this.token,
+          displayName: this.displayName,
+        };
+        if (this.repoRemote) auth.repoRemote = this.repoRemote;
+        if (this.email) auth.email = this.email;
+        ws.send(encodeMessage(auth));
       };
 
       ws.onmessage = (ev) => {
@@ -53,10 +84,25 @@ export class JoinClient {
         }
 
         switch (msg.type) {
+          case "auth.pending":
+            this.state.status = "pending";
+            this.state.userId = msg.userId;
+            this.onPending?.(msg.userId);
+            succeed();
+            break;
+
+          case "auth.denied":
+            this.state.status = "error";
+            this.state.error = msg.message;
+            fail(new Error(msg.message));
+            ws.close();
+            break;
+
           case "session.history":
             this.state.recentEvents = msg.events.slice(-50);
             this.state.status = "connected";
-            resolve();
+            this.onApproved?.();
+            succeed();
             break;
 
           case "session.event":
@@ -95,25 +141,27 @@ export class JoinClient {
             ws.close();
             break;
 
-          case "error":
+          case "error": {
+            const wasAdmitted =
+              this.state.status === "connected" || this.state.status === "pending";
             this.state.status = "error";
             this.state.error = msg.message;
-            if (this.state.recentEvents.length === 0) {
-              // Failed before we ever got history — reject the connect promise
-              reject(new Error(msg.message));
+            if (!wasAdmitted) {
+              fail(new Error(msg.message));
             }
             break;
+          }
         }
       };
 
       ws.onerror = () => {
         this.state.status = "error";
         this.state.error = "Connection error";
-        reject(new Error("WebSocket connection error"));
+        fail(new Error("WebSocket connection error"));
       };
 
       ws.onclose = () => {
-        if (this.state.status === "connected") {
+        if (this.state.status === "connected" || this.state.status === "pending") {
           this.state.status = "disconnected";
         }
       };
@@ -140,6 +188,14 @@ export class JoinClient {
 
   setEventHandler(fn: (event: SessionEvent) => void): void {
     this.onEvent = fn;
+  }
+
+  setPendingHandler(fn: (userId: string) => void): void {
+    this.onPending = fn;
+  }
+
+  setApprovedHandler(fn: () => void): void {
+    this.onApproved = fn;
   }
 
   sendTyping(): void {

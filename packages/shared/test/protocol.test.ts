@@ -3,6 +3,8 @@ import {
   encodeMessage,
   decodeServerMessage,
   decodeClientMessage,
+  normalizeEmail,
+  emailMatchesDomain,
 } from "../src/protocol.js";
 import type { ServerMessage, ClientMessage } from "../src/protocol.js";
 
@@ -26,20 +28,42 @@ describe("encodeMessage / decodeServerMessage", () => {
     const msg: ServerMessage = {
       type: "user.list",
       users: [
-        { userId: "u1", role: "admin", joinedAt: 1000 },
-        { userId: "u2", role: "view", joinedAt: 1001 },
+        {
+          userId: "u1",
+          role: "admin",
+          joinedAt: 1000,
+          displayName: "Host",
+          status: "active",
+        },
+        {
+          userId: "u2",
+          role: "view",
+          joinedAt: 1001,
+          displayName: "Bob",
+          status: "active",
+        },
       ],
+    };
+    expect(decodeServerMessage(encodeMessage(msg))).toEqual(msg);
+  });
+
+  it("round-trips auth.pending", () => {
+    const msg: ServerMessage = {
+      type: "auth.pending",
+      userId: "u2",
+      message: "Waiting for host approval",
     };
     expect(decodeServerMessage(encodeMessage(msg))).toEqual(msg);
   });
 });
 
 describe("encodeMessage / decodeClientMessage", () => {
-  it("round-trips an auth message", () => {
+  it("round-trips an auth message with email", () => {
     const msg: ClientMessage = {
       type: "auth",
       token: "abc123",
       displayName: "Alice",
+      email: "alice@acme.com",
     };
     expect(decodeClientMessage(encodeMessage(msg))).toEqual(msg);
   });
@@ -52,5 +76,15 @@ describe("encodeMessage / decodeClientMessage", () => {
   it("round-trips a host.promote message", () => {
     const msg: ClientMessage = { type: "host.promote", userId: "u2" };
     expect(decodeClientMessage(encodeMessage(msg))).toEqual(msg);
+  });
+});
+
+describe("email helpers", () => {
+  it("normalizes and matches company domains", () => {
+    expect(normalizeEmail("  Bob@Acme.COM ")).toBe("bob@acme.com");
+    expect(normalizeEmail("bad")).toBeNull();
+    expect(emailMatchesDomain("bob@acme.com", "acme.com")).toBe(true);
+    expect(emailMatchesDomain("bob@acme.com", "@acme.com")).toBe(true);
+    expect(emailMatchesDomain("bob@other.com", "acme.com")).toBe(false);
   });
 });
