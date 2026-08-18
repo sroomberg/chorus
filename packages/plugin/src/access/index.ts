@@ -44,6 +44,7 @@ export class AccessManager {
     userId: string,
     role: UserRole,
     displayName: string,
+    email?: string,
     status: UserStatus = "active"
   ): ConnectedUser {
     const user: ConnectedUser = {
@@ -51,6 +52,7 @@ export class AccessManager {
       role,
       joinedAt: Date.now(),
       displayName,
+      ...(email ? { email } : {}),
       status,
     };
     this.users.set(userId, user);
