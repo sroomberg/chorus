@@ -101,6 +101,16 @@
           "default": true,
           "description": "When sharing, hold joiners in pending until Approve/Deny (matches OpenCode plugin default)."
         },
+        "chorus.email": {
+          "type": "string",
+          "default": "",
+          "description": "Joiner email sent on auth when the host enabled an allowedEmailDomain gate."
+        },
+        "chorus.allowedEmailDomain": {
+          "type": "string",
+          "default": "",
+          "description": "When sharing, require joiners to authenticate with an email at this domain."
+        },
         "chorus.relayBin": {
           "type": "string",
           "default": "",

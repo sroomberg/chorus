@@ -6,7 +6,7 @@ export declare class AccessManager {
     issueToken(sessionId: string, role?: UserRole, ttlMs?: number): SessionToken;
     validateToken(token: string): SessionToken | null;
     revokeToken(token: string): void;
-    addUser(userId: string, role: UserRole, displayName: string, status?: UserStatus): ConnectedUser;
+    addUser(userId: string, role: UserRole, displayName: string, email?: string, status?: UserStatus): ConnectedUser;
     removeUser(userId: string): void;
     getUser(userId: string): ConnectedUser | undefined;
     setRole(userId: string, role: UserRole): boolean;

@@ -41,6 +41,9 @@ enum Commands {
         /// Optional git remote when the host enabled a same-repo gate
         #[arg(long, env = "CHORUS_REPO_REMOTE")]
         repo_remote: Option<String>,
+        /// Optional email when the host enabled an allowedEmailDomain gate
+        #[arg(long, env = "CHORUS_EMAIL")]
+        email: Option<String>,
     },
     /// Disconnect from the current session
     Leave,
@@ -79,6 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             token,
             name,
             repo_remote,
+            email,
         } => {
             ensure_daemon().await?;
             let resp = request(ControlRequest::Join {
@@ -86,6 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 token,
                 display_name: name,
                 repo_remote,
+                email,
             })
             .await?;
             print_response(&resp);
@@ -284,12 +289,14 @@ async fn handle_control(
             token,
             display_name,
             repo_remote,
+            email,
         } => {
             match JoinClient::connect(
                 &host,
                 &token,
                 &display_name,
                 repo_remote.as_deref(),
+                email.as_deref(),
             )
             .await
             {

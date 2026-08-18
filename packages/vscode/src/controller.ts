@@ -221,6 +221,7 @@ export class ChorusController {
     this.relay.setSessionPolicy({
       requireApproval: approval,
       repoRemote: repoRemote ?? "",
+      allowedEmailDomain: this.cfg().get<string>("allowedEmailDomain")?.trim() || undefined,
     });
     this.pendingUsers = [];
 
@@ -289,7 +290,8 @@ export class ChorusController {
 
     const displayName = normalizeDisplayName(name) ?? this.displayName();
     const repoRemote = detectRepoRemote();
-    const jc = new JoinClient(`ws://${host}/ws`, token, displayName, repoRemote);
+    const email = this.cfg().get<string>("email")?.trim() || undefined;
+    const jc = new JoinClient(`ws://${host}/ws`, token, displayName, repoRemote, email);
 
     jc.setChatHandler((msgName, content) => {
       const text = `💬 [${msgName ?? "host"}]: ${content}`;
