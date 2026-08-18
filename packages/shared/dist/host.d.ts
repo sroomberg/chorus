@@ -16,6 +16,11 @@ export type HostToRelay = {
     requireApproval?: boolean;
     repoRemote?: string | null;
     allowedEmailDomain?: string | null;
+    additionalRepoRemotePrefixes?: string[] | null;
+    repoRemoteRewrites?: {
+        from: string;
+        to: string;
+    }[] | null;
 } | {
     type: "chat.send";
     content: string;

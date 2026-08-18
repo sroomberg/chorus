@@ -131,6 +131,8 @@ Copy [chorus.example.json](./chorus.example.json) to get started. Example enterp
     "requireRepoMatch": true,
     "requireEmailDomainMatch": true,
     "allowedEmailDomain": "acme.com",
+    "additionalRepoRemotePrefixes": ["git://"],
+    "repoRemoteRewrites": [{ "from": "github.acme.com", "to": "github.com" }],
     "defaultRole": "edit",
     "tokenTtlMs": 86400000
   }
@@ -144,6 +146,8 @@ Copy [chorus.example.json](./chorus.example.json) to get started. Example enterp
 | `security.requireRepoMatch` | `false` | If `true`, share fails without a git `origin` |
 | `security.requireEmailDomainMatch` | `false` | If `true`, share fails unless `allowedEmailDomain` is set; joiners must use that domain |
 | `security.allowedEmailDomain` | — | Company email domain (e.g. `acme.com`) enforced on join |
+| `security.additionalRepoRemotePrefixes` | `[]` | Extra git URL prefixes to strip when matching remotes (e.g. `git://`) |
+| `security.repoRemoteRewrites` | `[]` | Host substitutions after normalize (e.g. `{ "from": "github.acme.com", "to": "github.com" }`) |
 | `security.defaultRole` | `edit` | Role when `/chorus-share` omits role |
 | `security.tokenTtlMs` | — | Optional join-token TTL |
 | `relay.port` / `relay.publicHost` | — | Relay listen / advertised join host |
@@ -176,7 +180,7 @@ Copy [chorus.example.json](./chorus.example.json) to get started. Example enterp
 | Join token | Still required; issued by `/chorus-share` with a role |
 | Display name | **Required** on `/chorus-join` — empty names are rejected |
 | Host approval | Config `security.requireApproval` (default on); joiner stays pending until `/chorus-approve` |
-| Git repo gate | If the host share directory has `origin` (or `requireRepoMatch`), joiners must present the same remote |
+| Git repo gate | If the host share directory has `origin` (or `requireRepoMatch`), joiners must present the same remote. Extra prefixes/rewrites come from `additionalRepoRemotePrefixes` / `repoRemoteRewrites`. |
 | Company email gate | If `allowedEmailDomain` is set (or `requireEmailDomainMatch`), joiners must auth with an email at that domain |
 | Kick | `/chorus-kick <userId>` disconnects an active joiner |
 

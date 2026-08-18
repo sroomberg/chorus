@@ -501,6 +501,8 @@ export default async function chorusPlugin(input: PluginInput) {
             requireApproval,
             repoRemote: repoRemote ?? "",
             allowedEmailDomain: allowedEmailDomain ?? "",
+            additionalRepoRemotePrefixes: config.security.additionalRepoRemotePrefixes,
+            repoRemoteRewrites: config.security.repoRemoteRewrites,
           });
 
           const joinHost = publicJoinHost(relay.getPort(), config);
@@ -542,6 +544,14 @@ export default async function chorusPlugin(input: PluginInput) {
             repoRemote
               ? `Repo gate on: joiners must be in a clone of ${repoRemote}.`
               : "No git origin detected — repo gate disabled for this share.",
+            config.security.additionalRepoRemotePrefixes.length
+              ? `Extra git remote prefixes: ${config.security.additionalRepoRemotePrefixes.join(", ")}.`
+              : null,
+            config.security.repoRemoteRewrites.length
+              ? `Git remote rewrites: ${config.security.repoRemoteRewrites
+                  .map((r) => `${r.from}→${r.to}`)
+                  .join(", ")}.`
+              : null,
             allowedEmailDomain
               ? `Email gate on: joiners must use @${allowedEmailDomain}.`
               : config.security.requireEmailDomainMatch
