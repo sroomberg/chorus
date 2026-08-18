@@ -16,6 +16,11 @@ export declare const chorusSecurityConfigSchema: z.ZodObject<{
         view: "view";
     }>>;
     allowedEmailDomain: z.ZodOptional<z.ZodString>;
+    additionalRepoRemotePrefixes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    repoRemoteRewrites: z.ZodDefault<z.ZodArray<z.ZodObject<{
+        from: z.ZodString;
+        to: z.ZodString;
+    }, z.core.$strict>>>;
     tokenTtlMs: z.ZodOptional<z.ZodNumber>;
 }, z.core.$strict>;
 export declare const chorusRelayConfigSchema: z.ZodObject<{
@@ -50,6 +55,11 @@ export declare const chorusConfigSchema: z.ZodObject<{
             view: "view";
         }>>;
         allowedEmailDomain: z.ZodOptional<z.ZodString>;
+        additionalRepoRemotePrefixes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        repoRemoteRewrites: z.ZodDefault<z.ZodArray<z.ZodObject<{
+            from: z.ZodString;
+            to: z.ZodString;
+        }, z.core.$strict>>>;
         tokenTtlMs: z.ZodOptional<z.ZodNumber>;
     }, z.core.$strict>>;
     relay: z.ZodDefault<z.ZodObject<{
