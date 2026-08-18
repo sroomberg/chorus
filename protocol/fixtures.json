@@ -40,7 +40,9 @@
         "userId": "u2",
         "role": "edit",
         "joinedAt": 1002,
-        "displayName": "Bob"
+        "displayName": "Bob",
+        "email": "bob@acme.com",
+        "status": "active"
       }
     },
     { "type": "user.left", "userId": "u2" },
@@ -48,15 +50,39 @@
     {
       "type": "user.list",
       "users": [
-        { "userId": "u1", "role": "admin", "joinedAt": 1000 },
-        { "userId": "u2", "role": "view", "joinedAt": 1001 }
+        {
+          "userId": "u1",
+          "role": "admin",
+          "joinedAt": 1000,
+          "displayName": "Host",
+          "status": "active"
+        },
+        {
+          "userId": "u2",
+          "role": "view",
+          "joinedAt": 1001,
+          "displayName": "Bob",
+          "status": "active"
+        }
       ]
     },
     { "type": "user.typing", "userId": "u2", "displayName": "Bob" },
+    {
+      "type": "auth.pending",
+      "userId": "u2",
+      "message": "Waiting for host approval"
+    },
+    { "type": "auth.denied", "message": "Host denied your join request" },
     { "type": "error", "code": "forbidden", "message": "viewers cannot prompt" }
   ],
   "clientMessages": [
-    { "type": "auth", "token": "abc123", "displayName": "Alice" },
+    {
+      "type": "auth",
+      "token": "abc123",
+      "displayName": "Alice",
+      "email": "alice@acme.com",
+      "repoRemote": "https://github.com/acme/app.git"
+    },
     { "type": "chat.send", "content": "hello chat" },
     { "type": "typing" },
     { "type": "collab.input", "content": "fix the bug" },
@@ -83,10 +109,20 @@
         "timestamp": 1000
       }
     },
+    {
+      "type": "session.policy",
+      "requireApproval": true,
+      "repoRemote": "https://github.com/acme/app.git",
+      "allowedEmailDomain": "acme.com",
+      "additionalRepoRemotePrefixes": ["git://"],
+      "repoRemoteRewrites": [{ "from": "github.acme.com", "to": "github.com" }]
+    },
     { "type": "chat.send", "content": "from host", "displayName": "Host" },
     { "type": "host.promote", "userId": "u2" },
     { "type": "host.demote", "userId": "u2" },
     { "type": "host.kick", "userId": "u2" },
+    { "type": "host.approve", "userId": "u2" },
+    { "type": "host.deny", "userId": "u2" },
     { "type": "host.close" },
     { "type": "status.get" }
   ],
@@ -124,15 +160,46 @@
         "userId": "u2",
         "role": "edit",
         "joinedAt": 1002,
-        "displayName": "Bob"
+        "displayName": "Bob",
+        "email": "bob@acme.com",
+        "status": "active"
+      }
+    },
+    {
+      "type": "user.pending",
+      "user": {
+        "userId": "u2",
+        "role": "edit",
+        "joinedAt": 1002,
+        "displayName": "Bob",
+        "status": "pending"
       }
     },
     { "type": "user.left", "userId": "u2" },
     {
       "type": "user.list",
-      "users": [{ "userId": "u1", "role": "admin", "joinedAt": 1000 }]
+      "users": [
+        {
+          "userId": "u1",
+          "role": "admin",
+          "joinedAt": 1000,
+          "displayName": "Host",
+          "status": "active"
+        }
+      ]
     },
-    { "type": "status", "clients": 2, "running": true },
+    {
+      "type": "status",
+      "clients": 2,
+      "running": true,
+      "policy": {
+        "requireApproval": true,
+        "repoRemote": "github.com/acme/app",
+        "allowedEmailDomain": "acme.com",
+        "additionalRepoRemotePrefixes": ["git://"],
+        "repoRemoteRewrites": [{ "from": "github.acme.com", "to": "github.com" }]
+      }
+    },
     { "type": "error", "code": "unauthorized", "message": "bad host token" }
   ]
 }

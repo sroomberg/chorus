@@ -15,6 +15,13 @@ Hand-written TypeScript types live in `@chorus/shared`. Hand-written Rust types 
 
 Field names on the wire are **camelCase** (`sessionId`, `userId`, `displayName`, …). Discriminator is always `type`.
 
+## Access control (v1)
+
+- Joiner `auth` requires a non-empty `displayName`.
+- Optional `repoRemote` on `auth` is compared (normalized) to host `session.policy.repoRemote` when set.
+- Host config can extend normalization via `session.policy.additionalRepoRemotePrefixes` and `session.policy.repoRemoteRewrites`.
+- When `session.policy.requireApproval` is true, joiners receive `auth.pending` until the host sends `host.approve` / `host.deny`.
+
 ## Changing the protocol
 
 1. Add or update examples in `fixtures.json`.

@@ -1,4 +1,4 @@
-import type { SessionEvent, SessionToken, UserRole } from "@chorus/shared";
+import type { ConnectedUser, SessionEvent, SessionToken, UserRole } from "@chorus/shared";
 export type RelayServerOptions = {
     /** Host running the relay (default 127.0.0.1). */
     host?: string;
@@ -39,10 +39,16 @@ export declare class RelayServer {
     private onInjectInput?;
     private onChatMessage?;
     private onTyping?;
+    private onUserPending?;
+    private onUserJoined?;
+    private onUserLeft?;
     constructor(port: number, opts?: RelayServerOptions);
     setInputHandler(fn: (content: string, userId: string, displayName?: string) => Promise<void>): void;
     setChatHandler(fn: (displayName: string | undefined, content: string) => void): void;
     setTypingHandler(fn: (displayName: string | undefined) => void): void;
+    setUserPendingHandler(fn: (user: ConnectedUser) => void): void;
+    setUserJoinedHandler(fn: (user: ConnectedUser) => void): void;
+    setUserLeftHandler(fn: (userId: string) => void): void;
     start(): Promise<void>;
     private statusUrl;
     private hostWsUrl;
@@ -51,6 +57,19 @@ export declare class RelayServer {
     private handleHostMessage;
     private send;
     issueToken(sessionId: string, role?: UserRole, ttlMs?: number): Promise<SessionToken>;
+    setSessionPolicy(opts: {
+        requireApproval?: boolean;
+        repoRemote?: string | null;
+        allowedEmailDomain?: string | null;
+        additionalRepoRemotePrefixes?: string[] | null;
+        repoRemoteRewrites?: {
+            from: string;
+            to: string;
+        }[] | null;
+    }): void;
+    approveUser(userId: string): void;
+    denyUser(userId: string): void;
+    kickUser(userId: string): void;
     pushEvent(event: SessionEvent): void;
     sendChat(displayName: string | undefined, content: string): void;
     stop(): void;

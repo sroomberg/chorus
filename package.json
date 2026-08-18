@@ -18,6 +18,7 @@
     "clean": "bun run --filter @chorus/shared clean && bun run --filter @chorus/plugin clean && cargo clean",
     "multi-agent": "bun scripts/multi-agent.ts",
     "test:multi-agent": "bun scripts/multi-agent.ts setup --agents 2 && bun scripts/multi-agent.ts up --agents 2 && bun scripts/multi-agent.ts smoke && bun scripts/multi-agent.ts pair && bun scripts/multi-agent.ts down",
+    "test:integration": "bun run test && bun run typecheck && bun run test:multi-agent && bun run test:security-e2e && bun run test:relay-stress",
     "test:relay-stress": "bun scripts/multi-agent.ts relay-stress --agents 5",
     "docker-agents": "bun scripts/docker-agents.ts",
     "test:docker-agents": "bun scripts/docker-agents.ts up --agents 2 && bun scripts/docker-agents.ts smoke && bun scripts/docker-agents.ts pair && bun scripts/docker-agents.ts down"

@@ -1,4 +1,4 @@
-import type { SessionToken, ConnectedUser, UserRole } from "@chorus/shared";
+import type { SessionToken, ConnectedUser, UserRole, UserStatus } from "@chorus/shared";
 import { randomBytes } from "node:crypto";
 
 export function generateToken(
@@ -40,8 +40,21 @@ export class AccessManager {
     this.tokens.delete(token);
   }
 
-  addUser(userId: string, role: UserRole, displayName?: string): ConnectedUser {
-    const user: ConnectedUser = { userId, role, joinedAt: Date.now(), displayName };
+  addUser(
+    userId: string,
+    role: UserRole,
+    displayName: string,
+    email?: string,
+    status: UserStatus = "active"
+  ): ConnectedUser {
+    const user: ConnectedUser = {
+      userId,
+      role,
+      joinedAt: Date.now(),
+      displayName,
+      ...(email ? { email } : {}),
+      status,
+    };
     this.users.set(userId, user);
     return user;
   }
@@ -61,16 +74,37 @@ export class AccessManager {
     return true;
   }
 
+  approve(userId: string): ConnectedUser | null {
+    const user = this.users.get(userId);
+    if (!user || user.status !== "pending") return null;
+    user.status = "active";
+    return user;
+  }
+
+  isPending(userId: string): boolean {
+    return this.users.get(userId)?.status === "pending";
+  }
+
+  isActive(userId: string): boolean {
+    return this.users.get(userId)?.status === "active";
+  }
+
   listUsers(): ConnectedUser[] {
     return [...this.users.values()];
   }
 
+  listActiveUsers(): ConnectedUser[] {
+    return [...this.users.values()].filter((u) => u.status === "active");
+  }
+
   isAdmin(userId: string): boolean {
-    return this.users.get(userId)?.role === "admin";
+    const user = this.users.get(userId);
+    return user?.role === "admin" && user.status === "active";
   }
 
   canSendInput(userId: string): boolean {
-    const role = this.users.get(userId)?.role;
-    return role === "admin" || role === "edit";
+    const user = this.users.get(userId);
+    if (!user || user.status !== "active") return false;
+    return user.role === "admin" || user.role === "edit";
   }
 }
