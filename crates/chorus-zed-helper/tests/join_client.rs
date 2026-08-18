@@ -92,7 +92,7 @@ async fn join_client_auth_chat_and_prompt() {
     let mut host = connect_host(port, host_token).await;
     let token = issue_token(&mut host).await;
 
-    let client = JoinClient::connect(&format!("127.0.0.1:{port}"), &token, "ZedTester", None)
+    let client = JoinClient::connect(&format!("127.0.0.1:{port}"), &token, "ZedTester", None, None)
         .await
         .expect("join");
     let snap = client.snapshot().await;

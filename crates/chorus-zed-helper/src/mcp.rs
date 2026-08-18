@@ -97,6 +97,10 @@ fn tool_defs() -> Vec<Value> {
                     "repo_remote": {
                         "type": "string",
                         "description": "Optional git remote URL when the host enabled a same-repo gate"
+                    },
+                    "email": {
+                        "type": "string",
+                        "description": "Optional email when the host enabled an allowedEmailDomain gate"
                     }
                 },
                 "required": ["host", "token", "display_name"]
@@ -166,9 +170,14 @@ async fn call_tool(
                 .and_then(|v| v.as_str())
                 .map(str::trim)
                 .filter(|s| !s.is_empty());
+            let email = args
+                .get("email")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
 
             let client =
-                JoinClient::connect(&host, &token, &display_name, repo_remote).await?;
+                JoinClient::connect(&host, &token, &display_name, repo_remote, email).await?;
             let snap = client.snapshot().await;
             let mut guard = session.lock().await;
             if let Some(old) = guard.client.take() {

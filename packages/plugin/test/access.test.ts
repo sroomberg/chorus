@@ -96,8 +96,13 @@ describe("AccessManager", () => {
       expect(mgr.canSendInput("view")).toBe(false);
     });
 
+    it("stores optional email on the user", () => {
+      const user = mgr.addUser("u1", "edit", "Alice", "alice@acme.com");
+      expect(user.email).toBe("alice@acme.com");
+    });
+
     it("pending users cannot send input until approved", () => {
-      mgr.addUser("p1", "edit", "Pat", "pending");
+      mgr.addUser("p1", "edit", "Pat", undefined, "pending");
       expect(mgr.canSendInput("p1")).toBe(false);
       expect(mgr.approve("p1")?.status).toBe("active");
       expect(mgr.canSendInput("p1")).toBe(true);

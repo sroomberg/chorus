@@ -314,11 +314,21 @@ export class RelayServer {
     });
   }
 
-  setSessionPolicy(opts: { requireApproval?: boolean; repoRemote?: string | null }): void {
+  setSessionPolicy(opts: {
+    requireApproval?: boolean;
+    repoRemote?: string | null;
+    allowedEmailDomain?: string | null;
+    additionalRepoRemotePrefixes?: string[] | null;
+    repoRemoteRewrites?: { from: string; to: string }[] | null;
+  }): void {
     this.send({
       type: "session.policy",
       requireApproval: opts.requireApproval,
       repoRemote: opts.repoRemote === null ? "" : opts.repoRemote,
+      allowedEmailDomain:
+        opts.allowedEmailDomain === null ? "" : opts.allowedEmailDomain,
+      additionalRepoRemotePrefixes: opts.additionalRepoRemotePrefixes ?? undefined,
+      repoRemoteRewrites: opts.repoRemoteRewrites ?? undefined,
     });
   }
 

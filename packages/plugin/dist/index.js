@@ -2,7 +2,8 @@ import { RelayServer, relayOptionsFromEnv } from "./relay/index.js";
 import { JoinClient } from "./join/index.js";
 import { S3BackupAdapter } from "./backup/index.js";
 import { detectRepoRemote } from "./git.js";
-import { normalizeDisplayName } from "@chorus/shared";
+import { loadChorusConfig, resolveDefaultRole, resolveRequireApproval, resolveAllowedEmailDomain, } from "./config/index.js";
+import { normalizeDisplayName, normalizeEmail } from "@chorus/shared";
 import { networkInterfaces } from "node:os";
 import { mkdirSync, existsSync, copyFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -11,6 +12,20 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 const DEFAULT_PORT = parseInt(process.env["CHORUS_PORT"] ?? "7742", 10);
 const { port: RELAY_PORT, opts: RELAY_OPTS } = relayOptionsFromEnv(DEFAULT_PORT);
+/** Cache project-scoped config by directory. */
+const configCache = new Map();
+function getConfig(projectDir) {
+    const key = projectDir ?? "";
+    const cached = configCache.get(key);
+    if (cached)
+        return cached;
+    const loaded = loadChorusConfig(projectDir);
+    configCache.set(key, loaded);
+    return loaded;
+}
+function effectiveRelayPort(config) {
+    return config.relay.port ?? RELAY_PORT;
+}
 // TODO: replace with native plugin slash command registration once supported
 // https://github.com/sst/opencode/issues/5305
 function installCommands() {
@@ -42,8 +57,10 @@ function getLanIp() {
     }
     return "localhost";
 }
-/** Host:port advertised to joiners (override with CHORUS_PUBLIC_HOST). */
-function publicJoinHost(port) {
+/** Host:port advertised to joiners (config / CHORUS_PUBLIC_HOST / LAN). */
+function publicJoinHost(port, config) {
+    if (config.relay.publicHost)
+        return config.relay.publicHost;
     if (process.env["CHORUS_PUBLIC_HOST"])
         return process.env["CHORUS_PUBLIC_HOST"];
     if (RELAY_OPTS.external && RELAY_OPTS.host && RELAY_OPTS.host !== "127.0.0.1") {
@@ -51,20 +68,21 @@ function publicJoinHost(port) {
     }
     return `${getLanIp()}:${port}`;
 }
-function buildBackupAdapter() {
-    const bucket = process.env["CHORUS_AWS_BUCKET"];
+function buildBackupAdapter(config) {
+    const bucket = config.backup.bucket ?? process.env["CHORUS_AWS_BUCKET"];
     if (!bucket)
         return null;
     return new S3BackupAdapter({
         bucket,
-        region: process.env["CHORUS_AWS_REGION"],
-        endpoint: process.env["CHORUS_AWS_ENDPOINT"],
+        region: config.backup.region ?? process.env["CHORUS_AWS_REGION"],
+        endpoint: config.backup.endpoint ?? process.env["CHORUS_AWS_ENDPOINT"],
     });
 }
 export default async function chorusPlugin(input) {
     installCommands();
-    const relay = new RelayServer(RELAY_PORT, RELAY_OPTS);
-    const backup = buildBackupAdapter();
+    const bootstrap = getConfig();
+    const relay = new RelayServer(effectiveRelayPort(bootstrap.config), RELAY_OPTS);
+    let backup = buildBackupAdapter(bootstrap.config);
     let sessionId = "";
     let sharing = false;
     const events = [];
@@ -230,9 +248,10 @@ export default async function chorusPlugin(input) {
         toast(`[${displayName ?? "someone"}] is typing…`, "info", 2000);
     });
     relay.setUserPendingHandler((user) => {
-        toast(`Join request from ${user.displayName} (${user.role}). Run chorus-approve userId="${user.userId}" or chorus-deny.`, "warning", 12_000);
+        const emailNote = user.email ? ` email=${user.email}` : "";
+        toast(`Join request from ${user.displayName} (${user.role}).${emailNote} Run chorus-approve userId="${user.userId}" or chorus-deny.`, "warning", 12_000);
         if (sessionId) {
-            say(sessionId, `Pending join: ${user.displayName} wants ${user.role} access (userId=${user.userId}). ` +
+            say(sessionId, `Pending join: ${user.displayName}${user.email ? ` <${user.email}>` : ""} wants ${user.role} access (userId=${user.userId}). ` +
                 `Approve with /chorus-approve ${user.userId} or deny with /chorus-deny ${user.userId}.`);
         }
     });
@@ -312,24 +331,24 @@ export default async function chorusPlugin(input) {
             "chorus-share": {
                 description: "Start sharing this session and generate a join token for a collaborator. " +
                     "The recipient must have OpenCode + the chorus plugin installed and run chorus-join. " +
-                    "Roles: edit (default, can send LLM messages), view (read-only), admin (full control). " +
-                    "By default the host must approve each joiner; set requireApproval=false to skip. " +
-                    "When this directory is a git checkout, joiners must present the same origin remote.",
+                    "Roles: edit (default from chorus.json), view (read-only), admin (full control). " +
+                    "Security defaults come from chorus.json (org/user/project); tool args override unless locked. " +
+                    "When requireRepoMatch is set or a git origin exists, joiners must present the same remote.",
                 args: {
                     role: z
                         .enum(["edit", "view", "admin"])
                         .optional()
-                        .describe("Role for the recipient. edit = can contribute (default); " +
-                        "view = read-only; admin = full control."),
+                        .describe("Role for the recipient. Defaults to security.defaultRole from config (usually edit)."),
                     requireApproval: z
                         .boolean()
                         .optional()
-                        .describe("If true (default), joiners wait in pending until chorus-approve. " +
-                        "Set false for open token join (LAN/trusted)."),
+                        .describe("Override security.requireApproval from config. Ignored when allowSkipApproval is false."),
                 },
                 async execute(args, context) {
-                    const grantedRole = args.role === "admin" ? "admin" : args.role === "view" ? "view" : "edit";
-                    const requireApproval = args.requireApproval !== false;
+                    const { config, sources } = getConfig(context.directory);
+                    backup = buildBackupAdapter(config);
+                    const grantedRole = resolveDefaultRole(config.security, args.role);
+                    const requireApproval = resolveRequireApproval(config.security, args.requireApproval);
                     const sid = sessionId || context.sessionID;
                     // Hosting + joining on the same plugin instance mirrors events into itself.
                     if (joinClient) {
@@ -347,12 +366,30 @@ export default async function chorusPlugin(input) {
                         say(sid, where);
                     }
                     const repoRemote = detectRepoRemote(context.directory);
+                    if (config.security.requireRepoMatch && !repoRemote) {
+                        return JSON.stringify({
+                            shared: false,
+                            error: "security.requireRepoMatch is enabled but this directory has no git origin. " +
+                                "Share from a clone with an origin remote, or relax requireRepoMatch in chorus.json.",
+                        });
+                    }
+                    const allowedEmailDomain = resolveAllowedEmailDomain(config.security);
+                    if (config.security.requireEmailDomainMatch && !allowedEmailDomain) {
+                        return JSON.stringify({
+                            shared: false,
+                            error: "security.requireEmailDomainMatch is enabled but security.allowedEmailDomain is not set. " +
+                                "Add allowedEmailDomain (e.g. acme.com) to chorus.json.",
+                        });
+                    }
                     relay.setSessionPolicy({
                         requireApproval,
                         repoRemote: repoRemote ?? "",
+                        allowedEmailDomain: allowedEmailDomain ?? "",
+                        additionalRepoRemotePrefixes: config.security.additionalRepoRemotePrefixes,
+                        repoRemoteRewrites: config.security.repoRemoteRewrites,
                     });
-                    const joinHost = publicJoinHost(relay.getPort());
-                    const token = await relay.issueToken(sid, grantedRole);
+                    const joinHost = publicJoinHost(relay.getPort(), config);
+                    const token = await relay.issueToken(sid, grantedRole, config.security.tokenTtlMs);
                     const info = {
                         token: token.token,
                         sessionId: sid,
@@ -361,21 +398,49 @@ export default async function chorusPlugin(input) {
                         role: grantedRole,
                         requireApproval,
                         ...(repoRemote ? { repoRemote } : {}),
+                        ...(allowedEmailDomain ? { allowedEmailDomain } : {}),
+                        ...(config.org.name ? { org: config.org.name } : {}),
                     };
-                    const joinCommand = `/chorus-join token="${token.token}" host="${joinHost}" name="YOUR_NAME"`;
+                    const joinCommand = allowedEmailDomain
+                        ? `/chorus-join token="${token.token}" host="${joinHost}" name="YOUR_NAME" email="you@${allowedEmailDomain}"`
+                        : `/chorus-join token="${token.token}" host="${joinHost}" name="YOUR_NAME"`;
                     const policyNotes = [
+                        config.org.name ? `Org: ${config.org.name}.` : null,
+                        config.org.policyNote ?? null,
                         requireApproval
                             ? "Joiners wait for your approval (chorus-approve / chorus-deny)."
                             : "Open join: token holders connect without approval.",
+                        !config.security.allowSkipApproval
+                            ? "Approval policy is locked by config (allowSkipApproval=false)."
+                            : null,
                         repoRemote
                             ? `Repo gate on: joiners must be in a clone of ${repoRemote}.`
                             : "No git origin detected — repo gate disabled for this share.",
-                    ].join(" ");
+                        config.security.additionalRepoRemotePrefixes.length
+                            ? `Extra git remote prefixes: ${config.security.additionalRepoRemotePrefixes.join(", ")}.`
+                            : null,
+                        config.security.repoRemoteRewrites.length
+                            ? `Git remote rewrites: ${config.security.repoRemoteRewrites
+                                .map((r) => `${r.from}→${r.to}`)
+                                .join(", ")}.`
+                            : null,
+                        allowedEmailDomain
+                            ? `Email gate on: joiners must use @${allowedEmailDomain}.`
+                            : config.security.requireEmailDomainMatch
+                                ? "Email domain gate is required by config but no domain is configured."
+                                : null,
+                        config.security.tokenTtlMs
+                            ? `Join token TTL: ${config.security.tokenTtlMs}ms.`
+                            : null,
+                    ]
+                        .filter(Boolean)
+                        .join(" ");
                     say(sid, `Send this command to your collaborator:\n${joinCommand}\n\n${policyNotes}`);
                     return JSON.stringify({
                         ...info,
                         connect: joinCommand,
                         policyNotes,
+                        configSources: sources.map((s) => s.path ?? s.kind),
                     });
                 },
             },
@@ -383,13 +448,18 @@ export default async function chorusPlugin(input) {
                 description: "Join another user's shared OpenCode session. " +
                     "Requires the token, host address, and a display name from the organizer via chorus-share. " +
                     "If the host enabled approval, you wait in pending until they approve. " +
-                    "If the host bound the session to a git repo, you must be in a matching clone.",
+                    "If the host bound the session to a git repo, you must be in a matching clone. " +
+                    "If the host enabled a company email gate, provide your work email.",
                 args: {
                     token: z.string().describe("The session token provided by the organizer."),
                     host: z
                         .string()
                         .describe("Host address of the organizer's relay, e.g. 192.168.1.5:7742"),
                     name: z.string().describe("Your display name in the session (required)."),
+                    email: z
+                        .string()
+                        .optional()
+                        .describe("Your work email when the host requires a company domain."),
                 },
                 async execute(args, context) {
                     if (sharing) {
@@ -406,6 +476,13 @@ export default async function chorusPlugin(input) {
                             error: "A non-empty name is required to join a chorus session.",
                         });
                     }
+                    const email = args.email ? normalizeEmail(args.email) : null;
+                    if (args.email?.trim() && !email) {
+                        return JSON.stringify({
+                            joined: false,
+                            error: "Provide a valid email address to join this session.",
+                        });
+                    }
                     if (joinClient) {
                         joinClient.disconnect();
                         joinClient = null;
@@ -413,7 +490,7 @@ export default async function chorusPlugin(input) {
                     joinSessionId = context.sessionID;
                     mirroredEventIds.clear();
                     const repoRemote = detectRepoRemote(context.directory);
-                    const jc = new JoinClient(`ws://${args.host}/ws`, args.token, displayName, repoRemote);
+                    const jc = new JoinClient(`ws://${args.host}/ws`, args.token, displayName, repoRemote, email ?? undefined);
                     try {
                         await jc.connect();
                     }
@@ -556,9 +633,11 @@ export default async function chorusPlugin(input) {
                 },
             },
             "chorus-status": {
-                description: "Show the current chorus state: whether sharing, joined, and who is connected.",
+                description: "Show the current chorus state: whether sharing, joined, who is connected, and effective config.",
                 args: {},
-                async execute() {
+                async execute(_args, context) {
+                    const loaded = getConfig(context.directory);
+                    const { config, sources } = loaded;
                     const shareInfo = sharing
                         ? {
                             sharing: true,
@@ -571,7 +650,20 @@ export default async function chorusPlugin(input) {
                     const joinInfo = joinClient
                         ? { joined: true, ...joinClient.getState() }
                         : { joined: false };
-                    return JSON.stringify({ ...shareInfo, ...joinInfo });
+                    return JSON.stringify({
+                        ...shareInfo,
+                        ...joinInfo,
+                        config: {
+                            org: config.org,
+                            security: config.security,
+                            relay: config.relay,
+                            backup: {
+                                configured: Boolean(config.backup.bucket),
+                                region: config.backup.region,
+                            },
+                            sources: sources.map((s) => ({ kind: s.kind, path: s.path })),
+                        },
+                    });
                 },
             },
             "chorus-stop": {

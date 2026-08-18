@@ -13,6 +13,7 @@ export declare class JoinClient {
     private readonly token;
     private readonly displayName;
     private readonly repoRemote?;
+    private readonly email?;
     private ws;
     private state;
     private onEvent?;
@@ -20,7 +21,7 @@ export declare class JoinClient {
     private onTyping?;
     private onPending?;
     private onApproved?;
-    constructor(relayUrl: string, token: string, displayName: string, repoRemote?: string | undefined);
+    constructor(relayUrl: string, token: string, displayName: string, repoRemote?: string | undefined, email?: string | undefined);
     connect(): Promise<void>;
     sendInput(content: string): void;
     sendChat(content: string): void;

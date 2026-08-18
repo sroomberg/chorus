@@ -29,7 +29,8 @@ export class JoinClient {
     private readonly relayUrl: string,
     private readonly token: string,
     private readonly displayName: string,
-    private readonly repoRemote?: string
+    private readonly repoRemote?: string,
+    private readonly email?: string
   ) {
     this.state = {
       status: "connecting",
@@ -63,12 +64,14 @@ export class JoinClient {
           token: string;
           displayName: string;
           repoRemote?: string;
+          email?: string;
         } = {
           type: "auth",
           token: this.token,
           displayName: this.displayName,
         };
         if (this.repoRemote) auth.repoRemote = this.repoRemote;
+        if (this.email) auth.email = this.email;
         ws.send(encodeMessage(auth));
       };
 

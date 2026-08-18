@@ -117,6 +117,27 @@ describe("RelayServer (Rust)", () => {
     expect(closed.code).toBe(4004);
   });
 
+  it("rejects joiners with mismatched company email when policy binds a domain", async () => {
+    relay.setSessionPolicy({
+      requireApproval: false,
+      allowedEmailDomain: "acme.com",
+    });
+    const token = (await relay.issueToken("sess-1")).token;
+    const ws = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+    await new Promise<void>((r) => (ws.onopen = () => r()));
+    ws.send(
+      encodeMessage({
+        type: "auth",
+        token,
+        displayName: "Eve",
+        email: "eve@other.com",
+      })
+    );
+
+    const closed = await new Promise<CloseEvent>((r) => (ws.onclose = r));
+    expect(closed.code).toBe(4007);
+  });
+
   it("accepts matching SSH/HTTPS remotes for the repo gate", async () => {
     relay.setSessionPolicy({
       requireApproval: false,
@@ -133,6 +154,36 @@ describe("RelayServer (Rust)", () => {
             token,
             displayName: "Dev",
             repoRemote: "git@github.com:acme/app.git",
+          })
+        );
+        resolve();
+      };
+      ws.onerror = reject;
+    });
+    ws.onmessage = (ev) => messages.push(decodeServerMessage(ev.data as string));
+    await waitFor(() => (messages.find((m) => m.type === "user.list") ? true : undefined));
+    expect(messages.some((m) => m.type === "session.history")).toBe(true);
+    ws.close();
+  });
+
+  it("accepts custom git remote prefixes and host rewrites", async () => {
+    relay.setSessionPolicy({
+      requireApproval: false,
+      repoRemote: "https://github.com/acme/app.git",
+      additionalRepoRemotePrefixes: ["git://"],
+      repoRemoteRewrites: [{ from: "github.acme.com", to: "github.com" }],
+    });
+    const token = (await relay.issueToken("sess-1")).token;
+    const ws = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+    const messages: ServerMessage[] = [];
+    await new Promise<void>((resolve, reject) => {
+      ws.onopen = () => {
+        ws.send(
+          encodeMessage({
+            type: "auth",
+            token,
+            displayName: "Dev",
+            repoRemote: "git://github.acme.com/acme/app.git",
           })
         );
         resolve();

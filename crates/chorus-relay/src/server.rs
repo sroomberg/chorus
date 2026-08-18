@@ -1,7 +1,8 @@
 use crate::access::AccessManager;
 use crate::protocol::{
-    normalize_display_name, normalize_repo_remote, ChatMessage, ClientMessage, HostToRelay,
-    RelayToHost, ServerMessage, SessionPolicy, UserRole, UserStatus,
+    email_matches_domain, normalize_display_name, normalize_email, sanitize_repo_remote_prefixes,
+    sanitize_repo_remote_rewrites, ChatMessage, ClientMessage, HostToRelay, RelayToHost,
+    ServerMessage, SessionPolicy, UserRole, UserStatus,
 };
 use crate::state::{ClientTx, HostTx, RelayState, SharedState};
 use axum::extract::ws::{Message, WebSocket};
@@ -140,6 +141,7 @@ async fn handle_joiner(socket: WebSocket, state: SharedState) {
                 token,
                 display_name,
                 repo_remote,
+                email,
             } => {
                 if user_id.is_some() {
                     continue;
@@ -157,12 +159,31 @@ async fn handle_joiner(socket: WebSocket, state: SharedState) {
                     break;
                 };
 
+                let email = match email.as_deref() {
+                    None => None,
+                    Some(raw) if raw.trim().is_empty() => None,
+                    Some(raw) => {
+                        let Some(normalized) = normalize_email(raw) else {
+                            let _ = tx.send(text_msg(&ServerMessage::Error {
+                                code: "EMAIL_INVALID".into(),
+                                message: "A valid email address is required to join".into(),
+                            }));
+                            let _ = tx.send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                                code: axum::extract::ws::CloseCode::from(4005u16),
+                                reason: "invalid email".into(),
+                            })));
+                            break;
+                        };
+                        Some(normalized)
+                    }
+                };
+
                 let mut guard = state.write().await;
 
                 if let Some(ref expected) = guard.policy.repo_remote {
                     let provided = repo_remote
                         .as_deref()
-                        .map(normalize_repo_remote)
+                        .map(|raw| guard.policy.normalize_remote(raw))
                         .filter(|s| !s.is_empty());
                     if provided.as_ref() != Some(expected) {
                         let _ = tx.send(text_msg(&ServerMessage::Error {
@@ -176,6 +197,40 @@ async fn handle_joiner(socket: WebSocket, state: SharedState) {
                             reason: "repo access denied".into(),
                         })));
                         break;
+                    }
+                }
+
+                if let Some(ref domain) = guard.policy.allowed_email_domain {
+                    let normalized_domain = domain
+                        .trim()
+                        .trim_start_matches('@')
+                        .to_ascii_lowercase();
+                    if !normalized_domain.is_empty() {
+                        let Some(ref em) = email else {
+                            let _ = tx.send(text_msg(&ServerMessage::Error {
+                                code: "EMAIL_REQUIRED".into(),
+                                message: "A company email address is required to join".into(),
+                            }));
+                            drop(guard);
+                            let _ = tx.send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                                code: axum::extract::ws::CloseCode::from(4006u16),
+                                reason: "email required".into(),
+                            })));
+                            break;
+                        };
+                        if !email_matches_domain(em, &normalized_domain) {
+                            let _ = tx.send(text_msg(&ServerMessage::Error {
+                                code: "EMAIL_ACCESS_DENIED".into(),
+                                message: "Joiner must use an email at the configured company domain"
+                                    .into(),
+                            }));
+                            drop(guard);
+                            let _ = tx.send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                                code: axum::extract::ws::CloseCode::from(4007u16),
+                                reason: "email access denied".into(),
+                            })));
+                            break;
+                        }
                     }
                 }
 
@@ -201,7 +256,7 @@ async fn handle_joiner(socket: WebSocket, state: SharedState) {
                 };
                 let user = guard
                     .access
-                    .add_user(uid.clone(), st.granted_role, display_name, status);
+                    .add_user(uid.clone(), st.granted_role, display_name, email, status);
                 guard.clients.insert(uid.clone(), tx.clone());
 
                 if user.status == UserStatus::Pending {
@@ -471,14 +526,32 @@ async fn handle_host(socket: WebSocket, state: SharedState, host_token: Arc<Stri
             HostToRelay::SessionPolicy {
                 require_approval,
                 repo_remote,
+                allowed_email_domain,
+                additional_repo_remote_prefixes,
+                repo_remote_rewrites,
             } => {
                 let mut guard = state.write().await;
                 if let Some(v) = require_approval {
                     guard.policy.require_approval = v;
                 }
+                if let Some(prefixes) = additional_repo_remote_prefixes {
+                    guard.policy.additional_repo_remote_prefixes =
+                        sanitize_repo_remote_prefixes(&prefixes);
+                }
+                if let Some(rewrites) = repo_remote_rewrites {
+                    guard.policy.repo_remote_rewrites = sanitize_repo_remote_rewrites(&rewrites);
+                }
                 if let Some(raw) = repo_remote {
-                    let normalized = normalize_repo_remote(&raw);
+                    let normalized = guard.policy.normalize_remote(&raw);
                     guard.policy.repo_remote = if normalized.is_empty() {
+                        None
+                    } else {
+                        Some(normalized)
+                    };
+                }
+                if let Some(raw) = allowed_email_domain {
+                    let normalized = raw.trim().trim_start_matches('@').to_ascii_lowercase();
+                    guard.policy.allowed_email_domain = if normalized.is_empty() {
                         None
                     } else {
                         Some(normalized)

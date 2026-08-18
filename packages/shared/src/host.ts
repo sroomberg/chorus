@@ -12,7 +12,14 @@ export type HostToRelay =
   | { type: "host.auth"; token: string }
   | { type: "token.issue"; sessionId: string; role?: UserRole; ttlMs?: number }
   | { type: "session.event"; event: SessionEvent }
-  | { type: "session.policy"; requireApproval?: boolean; repoRemote?: string | null }
+  | {
+      type: "session.policy";
+      requireApproval?: boolean;
+      repoRemote?: string | null;
+      allowedEmailDomain?: string | null;
+      additionalRepoRemotePrefixes?: string[] | null;
+      repoRemoteRewrites?: { from: string; to: string }[] | null;
+    }
   | { type: "chat.send"; content: string; displayName?: string }
   | { type: "host.promote"; userId: string }
   | { type: "host.demote"; userId: string }

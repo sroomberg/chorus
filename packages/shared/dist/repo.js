@@ -1,3 +1,11 @@
+const BUILTIN_PREFIXES = [
+    "git+https://",
+    "https://",
+    "http://",
+    "ssh://git@",
+    "ssh://",
+    "git@",
+];
 /**
  * Normalize a git remote URL for equality checks across SSH/HTTPS forms.
  * Examples:
@@ -5,25 +13,49 @@
  *   https://github.com/org/repo  → github.com/org/repo
  *   ssh://git@gitlab.com/org/repo.git → gitlab.com/org/repo
  */
-export function normalizeRepoRemote(raw) {
+export function normalizeRepoRemote(raw, opts) {
     let s = raw.trim();
     if (!s)
         return "";
     s = s.replace(/\.git$/i, "");
     const scp = s.match(/^git@([^:]+):(.+)$/i);
     if (scp) {
-        return `${scp[1].toLowerCase()}/${scp[2].replace(/^\/+/, "")}`.replace(/\/+$/, "");
+        const normalized = `${scp[1].toLowerCase()}/${scp[2].replace(/^\/+/, "")}`.replace(/\/+$/, "");
+        return applyRepoRemoteRewrites(normalized, opts?.rewrites);
     }
-    s = s.replace(/^(?:git\+)?https?:\/\//i, "");
-    s = s.replace(/^ssh:\/\/(?:git@)?/i, "");
-    s = s.replace(/^git@/i, "");
+    s = stripRepoRemotePrefix(s.toLowerCase(), opts?.extraPrefixes);
     // Drop credentials: user:pass@host/...
     s = s.replace(/^[^@/]+@/, "");
-    return s.replace(/\/+$/, "").toLowerCase();
+    return applyRepoRemoteRewrites(s.replace(/\/+$/, ""), opts?.rewrites);
 }
-export function repoRemotesMatch(a, b) {
-    const na = a ? normalizeRepoRemote(a) : "";
-    const nb = b ? normalizeRepoRemote(b) : "";
+function stripRepoRemotePrefix(lower, extraPrefixes) {
+    const prefixes = [
+        ...(extraPrefixes ?? []).map((p) => p.trim().toLowerCase()).filter(Boolean),
+        ...BUILTIN_PREFIXES,
+    ].sort((a, b) => b.length - a.length);
+    for (const prefix of prefixes) {
+        if (lower.startsWith(prefix)) {
+            return lower.slice(prefix.length);
+        }
+    }
+    return lower;
+}
+function applyRepoRemoteRewrites(normalized, rewrites) {
+    let out = normalized;
+    for (const rule of rewrites ?? []) {
+        const from = rule.from.trim().replace(/\/+$/, "").toLowerCase();
+        const to = rule.to.trim().replace(/\/+$/, "").toLowerCase();
+        if (!from)
+            continue;
+        if (out === from || out.startsWith(`${from}/`)) {
+            out = `${to}${out.slice(from.length)}`;
+        }
+    }
+    return out;
+}
+export function repoRemotesMatch(a, b, opts) {
+    const na = a ? normalizeRepoRemote(a, opts) : "";
+    const nb = b ? normalizeRepoRemote(b, opts) : "";
     if (!na || !nb)
         return false;
     return na === nb;
