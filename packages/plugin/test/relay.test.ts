@@ -117,6 +117,27 @@ describe("RelayServer (Rust)", () => {
     expect(closed.code).toBe(4004);
   });
 
+  it("rejects joiners with mismatched company email when policy binds a domain", async () => {
+    relay.setSessionPolicy({
+      requireApproval: false,
+      allowedEmailDomain: "acme.com",
+    });
+    const token = (await relay.issueToken("sess-1")).token;
+    const ws = new WebSocket(`ws://localhost:${TEST_PORT}/ws`);
+    await new Promise<void>((r) => (ws.onopen = () => r()));
+    ws.send(
+      encodeMessage({
+        type: "auth",
+        token,
+        displayName: "Eve",
+        email: "eve@other.com",
+      })
+    );
+
+    const closed = await new Promise<CloseEvent>((r) => (ws.onclose = r));
+    expect(closed.code).toBe(4007);
+  });
+
   it("accepts matching SSH/HTTPS remotes for the repo gate", async () => {
     relay.setSessionPolicy({
       requireApproval: false,

@@ -34,6 +34,8 @@ pub struct ConnectedUser {
     pub role: UserRole,
     pub joined_at: u64,
     pub display_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
     pub status: UserStatus,
 }
 
@@ -66,6 +68,8 @@ pub struct SessionPolicy {
     pub require_approval: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repo_remote: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_email_domain: Option<String>,
 }
 
 /// Messages sent from the relay to joiner clients on `/ws`.
@@ -126,6 +130,8 @@ pub enum ClientMessage {
         display_name: String,
         #[serde(rename = "repoRemote", default, skip_serializing_if = "Option::is_none")]
         repo_remote: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        email: Option<String>,
     },
     #[serde(rename = "chat.send")]
     ChatSend { content: String },
@@ -175,6 +181,9 @@ pub enum HostToRelay {
         /// Empty string clears the repo gate; omit to leave unchanged.
         #[serde(rename = "repoRemote", default)]
         repo_remote: Option<String>,
+        /// Empty string clears the email domain gate; omit to leave unchanged.
+        #[serde(rename = "allowedEmailDomain", default, skip_serializing_if = "Option::is_none")]
+        allowed_email_domain: Option<String>,
     },
     #[serde(rename = "chat.send")]
     ChatSend {
@@ -317,9 +326,39 @@ pub fn normalize_display_name(raw: &str) -> Option<String> {
     }
 }
 
+pub fn normalize_email(raw: &str) -> Option<String> {
+    let email = raw.trim().to_ascii_lowercase();
+    if email.is_empty() {
+        return None;
+    }
+    let at = email.find('@')?;
+    if at == 0 || at == email.len() - 1 || email[at + 1..].contains('@') {
+        return None;
+    }
+    if email.len() > 254 {
+        Some(email.chars().take(254).collect())
+    } else {
+        Some(email)
+    }
+}
+
+pub fn email_matches_domain(email: &str, allowed_domain: &str) -> bool {
+    let domain = allowed_domain
+        .trim()
+        .trim_start_matches('@')
+        .to_ascii_lowercase();
+    if domain.is_empty() {
+        return true;
+    }
+    let Some(at) = email.rfind('@') else {
+        return false;
+    };
+    email[at + 1..].eq_ignore_ascii_case(&domain)
+}
+
 #[cfg(test)]
 mod repo_tests {
-    use super::normalize_repo_remote;
+    use super::{email_matches_domain, normalize_email, normalize_repo_remote};
 
     #[test]
     fn normalizes_ssh_and_https() {
@@ -335,5 +374,17 @@ mod repo_tests {
             normalize_repo_remote("ssh://git@gitlab.com/acme/app"),
             "gitlab.com/acme/app"
         );
+    }
+
+    #[test]
+    fn normalizes_and_matches_email_domain() {
+        assert_eq!(
+            normalize_email("  Alice@Acme.COM  ").as_deref(),
+            Some("alice@acme.com")
+        );
+        assert!(normalize_email("not-an-email").is_none());
+        assert!(email_matches_domain("alice@acme.com", "acme.com"));
+        assert!(email_matches_domain("alice@acme.com", "@acme.com"));
+        assert!(!email_matches_domain("alice@other.com", "acme.com"));
     }
 }

@@ -165,6 +165,23 @@ export function resolveDefaultRole(
   return toolArg ?? security.defaultRole;
 }
 
+/** Trim and strip a leading @ from configured company email domains. */
+export function normalizeAllowedEmailDomain(raw: string | undefined): string | undefined {
+  const domain = raw?.trim().replace(/^@/, "").toLowerCase();
+  return domain || undefined;
+}
+
+/** Domain enforced on join when configured or when requireEmailDomainMatch is locked on. */
+export function resolveAllowedEmailDomain(
+  security: ChorusConfig["security"]
+): string | undefined {
+  return normalizeAllowedEmailDomain(security.allowedEmailDomain);
+}
+
+export function emailDomainGateEnabled(security: ChorusConfig["security"]): boolean {
+  return security.requireEmailDomainMatch || resolveAllowedEmailDomain(security) !== undefined;
+}
+
 /** Parse a raw object (tests / programmatic use) without filesystem. */
 export function parseChorusConfig(raw: ChorusConfigFile | Record<string, unknown>): ChorusConfig {
   return chorusConfigSchema.parse(raw);

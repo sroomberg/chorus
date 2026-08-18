@@ -73,6 +73,7 @@ impl AccessManager {
         user_id: String,
         role: UserRole,
         display_name: String,
+        email: Option<String>,
         status: UserStatus,
     ) -> ConnectedUser {
         let user = ConnectedUser {
@@ -80,6 +81,7 @@ impl AccessManager {
             role,
             joined_at: now_ms(),
             display_name,
+            email,
             status,
         };
         self.users.insert(user_id, user.clone());
@@ -216,11 +218,30 @@ mod tests {
             "a".into(),
             UserRole::Admin,
             "A".into(),
+            None,
             UserStatus::Active,
         );
-        let editor = mgr.add_user("e".into(), UserRole::Edit, "E".into(), UserStatus::Active);
-        let viewer = mgr.add_user("v".into(), UserRole::View, "V".into(), UserStatus::Active);
-        let pending = mgr.add_user("p".into(), UserRole::Edit, "P".into(), UserStatus::Pending);
+        let editor = mgr.add_user(
+            "e".into(),
+            UserRole::Edit,
+            "E".into(),
+            None,
+            UserStatus::Active,
+        );
+        let viewer = mgr.add_user(
+            "v".into(),
+            UserRole::View,
+            "V".into(),
+            None,
+            UserStatus::Active,
+        );
+        let pending = mgr.add_user(
+            "p".into(),
+            UserRole::Edit,
+            "P".into(),
+            None,
+            UserStatus::Pending,
+        );
         assert!(mgr.is_admin(&admin.user_id));
         assert!(mgr.can_send_input(&editor.user_id));
         assert!(!mgr.can_send_input(&viewer.user_id));
@@ -232,7 +253,13 @@ mod tests {
     #[test]
     fn approve_promotes_pending() {
         let mut mgr = AccessManager::new();
-        mgr.add_user("p".into(), UserRole::Edit, "Pat".into(), UserStatus::Pending);
+        mgr.add_user(
+            "p".into(),
+            UserRole::Edit,
+            "Pat".into(),
+            None,
+            UserStatus::Pending,
+        );
         assert!(mgr.is_pending("p"));
         let user = mgr.approve("p").unwrap();
         assert_eq!(user.status, UserStatus::Active);

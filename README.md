@@ -129,6 +129,8 @@ Copy [chorus.example.json](./chorus.example.json) to get started. Example enterp
     "requireApproval": true,
     "allowSkipApproval": false,
     "requireRepoMatch": true,
+    "requireEmailDomainMatch": true,
+    "allowedEmailDomain": "acme.com",
     "defaultRole": "edit",
     "tokenTtlMs": 86400000
   }
@@ -140,6 +142,8 @@ Copy [chorus.example.json](./chorus.example.json) to get started. Example enterp
 | `security.requireApproval` | `true` | Joiners pending until host approve/deny |
 | `security.allowSkipApproval` | `true` | If `false`, tool args cannot turn approval off |
 | `security.requireRepoMatch` | `false` | If `true`, share fails without a git `origin` |
+| `security.requireEmailDomainMatch` | `false` | If `true`, share fails unless `allowedEmailDomain` is set; joiners must use that domain |
+| `security.allowedEmailDomain` | — | Company email domain (e.g. `acme.com`) enforced on join |
 | `security.defaultRole` | `edit` | Role when `/chorus-share` omits role |
 | `security.tokenTtlMs` | — | Optional join-token TTL |
 | `relay.port` / `relay.publicHost` | — | Relay listen / advertised join host |
@@ -173,6 +177,7 @@ Copy [chorus.example.json](./chorus.example.json) to get started. Example enterp
 | Display name | **Required** on `/chorus-join` — empty names are rejected |
 | Host approval | Config `security.requireApproval` (default on); joiner stays pending until `/chorus-approve` |
 | Git repo gate | If the host share directory has `origin` (or `requireRepoMatch`), joiners must present the same remote |
+| Company email gate | If `allowedEmailDomain` is set (or `requireEmailDomainMatch`), joiners must auth with an email at that domain |
 | Kick | `/chorus-kick <userId>` disconnects an active joiner |
 
 Remote tunneling (`bore` / `cloudflared`) is not implemented yet — share a LAN IP + port for now.

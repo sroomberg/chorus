@@ -7,11 +7,12 @@ import {
   loadChorusConfig,
   resolveDefaultRole,
   resolveRequireApproval,
+  resolveAllowedEmailDomain,
   type ChorusConfig,
   type LoadedChorusConfig,
 } from "./config/index.js";
 import type { SessionEvent, ShareInfo, UserRole } from "@chorus/shared";
-import { normalizeDisplayName } from "@chorus/shared";
+import { normalizeDisplayName, normalizeEmail } from "@chorus/shared";
 import { networkInterfaces } from "node:os";
 import { mkdirSync, existsSync, copyFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -322,15 +323,16 @@ export default async function chorusPlugin(input: PluginInput) {
   });
 
   relay.setUserPendingHandler((user) => {
+    const emailNote = user.email ? ` email=${user.email}` : "";
     toast(
-      `Join request from ${user.displayName} (${user.role}). Run chorus-approve userId="${user.userId}" or chorus-deny.`,
+      `Join request from ${user.displayName} (${user.role}).${emailNote} Run chorus-approve userId="${user.userId}" or chorus-deny.`,
       "warning",
       12_000
     );
     if (sessionId) {
       say(
         sessionId,
-        `Pending join: ${user.displayName} wants ${user.role} access (userId=${user.userId}). ` +
+        `Pending join: ${user.displayName}${user.email ? ` <${user.email}>` : ""} wants ${user.role} access (userId=${user.userId}). ` +
           `Approve with /chorus-approve ${user.userId} or deny with /chorus-deny ${user.userId}.`
       );
     }
@@ -485,9 +487,20 @@ export default async function chorusPlugin(input: PluginInput) {
             });
           }
 
+          const allowedEmailDomain = resolveAllowedEmailDomain(config.security);
+          if (config.security.requireEmailDomainMatch && !allowedEmailDomain) {
+            return JSON.stringify({
+              shared: false,
+              error:
+                "security.requireEmailDomainMatch is enabled but security.allowedEmailDomain is not set. " +
+                "Add allowedEmailDomain (e.g. acme.com) to chorus.json.",
+            });
+          }
+
           relay.setSessionPolicy({
             requireApproval,
             repoRemote: repoRemote ?? "",
+            allowedEmailDomain: allowedEmailDomain ?? "",
           });
 
           const joinHost = publicJoinHost(relay.getPort(), config);
@@ -500,6 +513,7 @@ export default async function chorusPlugin(input: PluginInput) {
             role: string;
             requireApproval: boolean;
             repoRemote?: string;
+            allowedEmailDomain?: string;
             org?: string;
           } = {
             token: token.token,
@@ -509,10 +523,13 @@ export default async function chorusPlugin(input: PluginInput) {
             role: grantedRole,
             requireApproval,
             ...(repoRemote ? { repoRemote } : {}),
+            ...(allowedEmailDomain ? { allowedEmailDomain } : {}),
             ...(config.org.name ? { org: config.org.name } : {}),
           };
 
-          const joinCommand = `/chorus-join token="${token.token}" host="${joinHost}" name="YOUR_NAME"`;
+          const joinCommand = allowedEmailDomain
+            ? `/chorus-join token="${token.token}" host="${joinHost}" name="YOUR_NAME" email="you@${allowedEmailDomain}"`
+            : `/chorus-join token="${token.token}" host="${joinHost}" name="YOUR_NAME"`;
           const policyNotes = [
             config.org.name ? `Org: ${config.org.name}.` : null,
             config.org.policyNote ?? null,
@@ -525,6 +542,11 @@ export default async function chorusPlugin(input: PluginInput) {
             repoRemote
               ? `Repo gate on: joiners must be in a clone of ${repoRemote}.`
               : "No git origin detected — repo gate disabled for this share.",
+            allowedEmailDomain
+              ? `Email gate on: joiners must use @${allowedEmailDomain}.`
+              : config.security.requireEmailDomainMatch
+                ? "Email domain gate is required by config but no domain is configured."
+                : null,
             config.security.tokenTtlMs
               ? `Join token TTL: ${config.security.tokenTtlMs}ms.`
               : null,
@@ -547,16 +569,21 @@ export default async function chorusPlugin(input: PluginInput) {
           "Join another user's shared OpenCode session. " +
           "Requires the token, host address, and a display name from the organizer via chorus-share. " +
           "If the host enabled approval, you wait in pending until they approve. " +
-          "If the host bound the session to a git repo, you must be in a matching clone.",
+          "If the host bound the session to a git repo, you must be in a matching clone. " +
+          "If the host enabled a company email gate, provide your work email.",
         args: {
           token: z.string().describe("The session token provided by the organizer."),
           host: z
             .string()
             .describe("Host address of the organizer's relay, e.g. 192.168.1.5:7742"),
           name: z.string().describe("Your display name in the session (required)."),
+          email: z
+            .string()
+            .optional()
+            .describe("Your work email when the host requires a company domain."),
         },
         async execute(
-          args: { token: string; host: string; name: string },
+          args: { token: string; host: string; name: string; email?: string },
           context: ToolContext
         ) {
           if (sharing) {
@@ -576,6 +603,14 @@ export default async function chorusPlugin(input: PluginInput) {
             });
           }
 
+          const email = args.email ? normalizeEmail(args.email) : null;
+          if (args.email?.trim() && !email) {
+            return JSON.stringify({
+              joined: false,
+              error: "Provide a valid email address to join this session.",
+            });
+          }
+
           if (joinClient) {
             joinClient.disconnect();
             joinClient = null;
@@ -588,7 +623,8 @@ export default async function chorusPlugin(input: PluginInput) {
             `ws://${args.host}/ws`,
             args.token,
             displayName,
-            repoRemote
+            repoRemote,
+            email ?? undefined
           );
 
           try {

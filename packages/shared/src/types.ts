@@ -16,6 +16,7 @@ export interface ConnectedUser {
   role: UserRole;
   joinedAt: number;
   displayName: string;
+  email?: string;
   status: UserStatus;
 }
 
@@ -65,4 +66,6 @@ export interface SessionPolicy {
   requireApproval: boolean;
   /** Normalized or raw host git remote; absent/empty means no repo gate. */
   repoRemote?: string;
+  /** Joiners must use an email at this domain (e.g. acme.com). */
+  allowedEmailDomain?: string;
 }
