@@ -54,6 +54,17 @@ function extractToken(text: string): string | null {
   return text.match(/token="([0-9a-f]{64})"/)?.[1] ?? null;
 }
 
+async function expectReject(p: Promise<unknown>, label: string): Promise<void> {
+  try {
+    await p;
+    throw new Error(`expected ${label} join to fail`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/expected .+ join to fail/.test(msg)) throw err;
+    console.log(`  ${label}: ${msg}`);
+  }
+}
+
 async function main() {
   if (!existsSync(STATE)) throw new Error("Run multi-agent up first");
   const state = JSON.parse(readFileSync(STATE, "utf8")) as {
@@ -85,11 +96,32 @@ async function main() {
   console.log("→ JoinClient connect (protocol)");
   const repoRemote = detectRepoRemote(REPO);
   console.log(`  repoRemote=${repoRemote ?? "(none)"}`);
+
+  const emailGate = /email gate|allowedEmailDomain|@chorus\.test/i.test(blob);
+  if (emailGate) {
+    console.log("→ reject missing/wrong email");
+    for (const [label, email] of [
+      ["none", undefined],
+      ["wrong", "eve@other.com"],
+    ] as const) {
+      const bad = new JoinClient(
+        `ws://127.0.0.1:7742/ws`,
+        token,
+        "BadJoiner",
+        repoRemote,
+        email
+      );
+      await expectReject(bad.connect(), label);
+    }
+    console.log("✓ email gate rejected missing/wrong domain");
+  }
+
   const jc = new JoinClient(
     `ws://127.0.0.1:7742/ws`,
     token,
     "HybridJoiner",
-    repoRemote
+    repoRemote,
+    emailGate ? "dev@chorus.test" : undefined
   );
   await jc.connect();
   const st = jc.getState();
