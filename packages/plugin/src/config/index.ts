@@ -19,6 +19,9 @@ export {
   systemConfigPath,
   resolveRequireApproval,
   resolveDefaultRole,
+  normalizeAllowedEmailDomain,
+  resolveAllowedEmailDomain,
+  emailDomainGateEnabled,
   type ConfigSource,
   type LoadedChorusConfig,
 } from "./load.js";

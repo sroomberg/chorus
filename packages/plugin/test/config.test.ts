@@ -8,6 +8,8 @@ import {
   loadChorusConfig,
   resolveRequireApproval,
   resolveDefaultRole,
+  resolveAllowedEmailDomain,
+  emailDomainGateEnabled,
   DEFAULT_CHORUS_CONFIG,
 } from "../src/config/index.js";
 
@@ -17,6 +19,7 @@ describe("parseChorusConfig", () => {
     expect(cfg.security.requireApproval).toBe(true);
     expect(cfg.security.allowSkipApproval).toBe(true);
     expect(cfg.security.requireRepoMatch).toBe(false);
+    expect(cfg.security.requireEmailDomainMatch).toBe(false);
     expect(cfg.security.defaultRole).toBe("edit");
   });
 
@@ -27,6 +30,8 @@ describe("parseChorusConfig", () => {
         requireApproval: true,
         allowSkipApproval: false,
         requireRepoMatch: true,
+        requireEmailDomainMatch: true,
+        allowedEmailDomain: "acme.com",
         defaultRole: "view",
         tokenTtlMs: 3600000,
       },
@@ -34,6 +39,8 @@ describe("parseChorusConfig", () => {
     expect(cfg.org.name).toBe("Acme");
     expect(cfg.security.allowSkipApproval).toBe(false);
     expect(cfg.security.requireRepoMatch).toBe(true);
+    expect(cfg.security.requireEmailDomainMatch).toBe(true);
+    expect(cfg.security.allowedEmailDomain).toBe("acme.com");
     expect(cfg.security.defaultRole).toBe("view");
     expect(cfg.security.tokenTtlMs).toBe(3600000);
   });
@@ -74,6 +81,36 @@ describe("resolveRequireApproval / resolveDefaultRole", () => {
       allowSkipApproval: false,
     };
     expect(resolveRequireApproval(security, false)).toBe(true);
+  });
+});
+
+describe("resolveAllowedEmailDomain / emailDomainGateEnabled", () => {
+  it("normalizes configured domains", () => {
+    expect(
+      resolveAllowedEmailDomain({
+        ...DEFAULT_CHORUS_CONFIG.security,
+        allowedEmailDomain: "@Acme.COM",
+      })
+    ).toBe("acme.com");
+  });
+
+  it("treats email gate as enabled when requireEmailDomainMatch is on", () => {
+    expect(
+      emailDomainGateEnabled({
+        ...DEFAULT_CHORUS_CONFIG.security,
+        requireEmailDomainMatch: true,
+        allowedEmailDomain: "acme.com",
+      })
+    ).toBe(true);
+  });
+
+  it("treats email gate as enabled when only allowedEmailDomain is set", () => {
+    expect(
+      emailDomainGateEnabled({
+        ...DEFAULT_CHORUS_CONFIG.security,
+        allowedEmailDomain: "acme.com",
+      })
+    ).toBe(true);
   });
 });
 

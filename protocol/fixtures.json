@@ -41,6 +41,7 @@
         "role": "edit",
         "joinedAt": 1002,
         "displayName": "Bob",
+        "email": "bob@acme.com",
         "status": "active"
       }
     },
@@ -79,6 +80,7 @@
       "type": "auth",
       "token": "abc123",
       "displayName": "Alice",
+      "email": "alice@acme.com",
       "repoRemote": "https://github.com/acme/app.git"
     },
     { "type": "chat.send", "content": "hello chat" },
@@ -110,7 +112,8 @@
     {
       "type": "session.policy",
       "requireApproval": true,
-      "repoRemote": "https://github.com/acme/app.git"
+      "repoRemote": "https://github.com/acme/app.git",
+      "allowedEmailDomain": "acme.com"
     },
     { "type": "chat.send", "content": "from host", "displayName": "Host" },
     { "type": "host.promote", "userId": "u2" },
@@ -156,6 +159,7 @@
         "role": "edit",
         "joinedAt": 1002,
         "displayName": "Bob",
+        "email": "bob@acme.com",
         "status": "active"
       }
     },
@@ -188,7 +192,8 @@
       "running": true,
       "policy": {
         "requireApproval": true,
-        "repoRemote": "github.com/acme/app"
+        "repoRemote": "github.com/acme/app",
+        "allowedEmailDomain": "acme.com"
       }
     },
     { "type": "error", "code": "unauthorized", "message": "bad host token" }

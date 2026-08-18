@@ -15,6 +15,7 @@ export type HostToRelay = {
     type: "session.policy";
     requireApproval?: boolean;
     repoRemote?: string | null;
+    allowedEmailDomain?: string | null;
 } | {
     type: "chat.send";
     content: string;
