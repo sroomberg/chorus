@@ -61,6 +61,11 @@ export declare class RelayServer {
         requireApproval?: boolean;
         repoRemote?: string | null;
         allowedEmailDomain?: string | null;
+        additionalRepoRemotePrefixes?: string[] | null;
+        repoRemoteRewrites?: {
+            from: string;
+            to: string;
+        }[] | null;
     }): void;
     approveUser(userId: string): void;
     denyUser(userId: string): void;
