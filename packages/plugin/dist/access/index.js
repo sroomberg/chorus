@@ -30,12 +30,13 @@ export class AccessManager {
     revokeToken(token) {
         this.tokens.delete(token);
     }
-    addUser(userId, role, displayName, status = "active") {
+    addUser(userId, role, displayName, email, status = "active") {
         const user = {
             userId,
             role,
             joinedAt: Date.now(),
             displayName,
+            ...(email ? { email } : {}),
             status,
         };
         this.users.set(userId, user);

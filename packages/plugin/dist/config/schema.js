@@ -5,6 +5,7 @@ const securityDefaults = {
     requireApproval: true,
     allowSkipApproval: true,
     requireRepoMatch: false,
+    requireEmailDomainMatch: false,
     defaultRole: "edit",
 };
 export const chorusSecurityConfigSchema = z
@@ -21,8 +22,17 @@ export const chorusSecurityConfigSchema = z
      * (so the session always carries a repo gate).
      */
     requireRepoMatch: z.boolean().default(securityDefaults.requireRepoMatch),
+    /**
+     * When true, /chorus-share fails unless security.allowedEmailDomain is set,
+     * and joiners must present an email at that domain.
+     */
+    requireEmailDomainMatch: z
+        .boolean()
+        .default(securityDefaults.requireEmailDomainMatch),
     /** Default role baked into issued join tokens. */
     defaultRole: chorusRoleSchema.default(securityDefaults.defaultRole),
+    /** Company email domain for joiners (e.g. acme.com). Required when requireEmailDomainMatch is true. */
+    allowedEmailDomain: z.string().min(1).optional(),
     /** Optional TTL for join tokens (ms). Omit for non-expiring tokens. */
     tokenTtlMs: z.number().int().positive().optional(),
 })

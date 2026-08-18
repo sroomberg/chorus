@@ -101,11 +101,13 @@ export default function chorusPlugin(input: PluginInput): Promise<{
                 token: z.ZodString;
                 host: z.ZodString;
                 name: z.ZodString;
+                email: z.ZodOptional<z.ZodString>;
             };
             execute(args: {
                 token: string;
                 host: string;
                 name: string;
+                email?: string;
             }, context: ToolContext): Promise<string>;
         };
         "chorus-approve": {

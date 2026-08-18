@@ -30,6 +30,11 @@ export declare function loadChorusConfig(projectDir?: string): LoadedChorusConfi
  */
 export declare function resolveRequireApproval(security: ChorusConfig["security"], toolArg?: boolean): boolean;
 export declare function resolveDefaultRole(security: ChorusConfig["security"], toolArg?: "edit" | "view" | "admin"): "edit" | "view" | "admin";
+/** Trim and strip a leading @ from configured company email domains. */
+export declare function normalizeAllowedEmailDomain(raw: string | undefined): string | undefined;
+/** Domain enforced on join when configured or when requireEmailDomainMatch is locked on. */
+export declare function resolveAllowedEmailDomain(security: ChorusConfig["security"]): string | undefined;
+export declare function emailDomainGateEnabled(security: ChorusConfig["security"]): boolean;
 /** Parse a raw object (tests / programmatic use) without filesystem. */
 export declare function parseChorusConfig(raw: ChorusConfigFile | Record<string, unknown>): ChorusConfig;
 export { DEFAULT_CHORUS_CONFIG };

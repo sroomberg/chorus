@@ -60,6 +60,7 @@ export declare class RelayServer {
     setSessionPolicy(opts: {
         requireApproval?: boolean;
         repoRemote?: string | null;
+        allowedEmailDomain?: string | null;
     }): void;
     approveUser(userId: string): void;
     denyUser(userId: string): void;
