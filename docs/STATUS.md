@@ -29,27 +29,37 @@ Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`
 
 5. **Joiner dual-session**: joiner prompts are forwarded to the host and the local joiner LLM turn is aborted; mirrored `[AI]:` from the host is the shared reply. Residual risk if `session.abort` races.
 6. **True session viewing**: host + all joiners receive the same event stream; joiners inject into their OpenCode transcript. **Live UI:** OpenCode web UI on the agent port updates; `opencode attach` TUI often does not (upstream). Toasts + TUI session nudge are best-effort for attach. Guard: same agent cannot share and join (that mirrored AI replies back into the host and looped).
-7. **Host moderation tools**: protocol has `host.promote|demote|kick|close`, but the host is not a WS client, so those controls are unreachable. Add `chorus-promote` / `chorus-kick` (etc.) as host-side tools.
+7. **Host moderation tools**: `chorus-approve` / `chorus-deny` / `chorus-kick` now cover pending admission and kick. Promote/demote still need host-side tools wired to `/host`.
 
 ### P1 — remote use & security
 
 8. Implement `tunnel/` (`bore` / `cloudflared`) or explicitly market LAN-only.
 9. Default token TTL; revoke tokens on `chorus-stop`.
 10. TLS / auth hardening for off-LAN; protocol decode is bare `JSON.parse`.
+11. Stronger repo ACL (GitHub/GitLab API or signed capability) — current gate is same-remote claim only.
+12. Host moderation UI polish (pending queue in `chorus-status`, bulk approve).
+
+### Security shipped (this pass)
+
+- Host approval gate (`requireApproval`, default on for `/chorus-share`; `chorus-approve` / `chorus-deny`)
+- Required display name on join (no anonymous / empty names)
+- Git origin binding when the host share directory has a remote (joiner must present matching remote)
+- `chorus-kick` for active joiners
+- Layered `chorus.json` config (org/user/project) for security + relay + backup defaults, with enterprise locks
 
 ### P1 — reliability
 
-11. Serialize collab input injection (current “queue” can race).
-12. JoinClient reconnect + connect timeout.
-13. Replay chat history on join (events only today).
-14. Refresh installed slash commands on plugin upgrade (today: skip if dest exists).
+13. Serialize collab input injection (current “queue” can race).
+14. JoinClient reconnect + connect timeout.
+15. Replay chat history on join (events only today).
+16. Refresh installed slash commands on plugin upgrade (today: skip if dest exists).
 
 ### P2 — backup & polish
 
-15. Backup AI + chat events; expose restore/list; set `endedAt` on stop.
-16. Drop unused `@aws-sdk/lib-storage` or use it.
-17. Broader tests: roles/view-forbid, kick/close, chat/typing, plugin entry, tunnel.
-18. Native slash-command registration when [opencode#5305](https://github.com/sst/opencode/issues/5305) lands.
+17. Backup AI + chat events; expose restore/list; set `endedAt` on stop.
+18. Drop unused `@aws-sdk/lib-storage` or use it.
+19. Broader tests: roles/view-forbid, kick/close, chat/typing, plugin entry, tunnel.
+20. Native slash-command registration when [opencode#5305](https://github.com/sst/opencode/issues/5305) lands.
 
 ## Local multi-agent harness
 

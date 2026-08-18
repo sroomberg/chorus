@@ -1,4 +1,4 @@
-import type { SessionEvent, ChatMessage, ConnectedUser, SessionToken, UserRole } from "./types.js";
+import type { SessionEvent, ChatMessage, ConnectedUser, SessionToken, UserRole, SessionPolicy } from "./types.js";
 /** Control-plane messages: OpenCode plugin host → Rust relay (`/host`). */
 export type HostToRelay = {
     type: "host.auth";
@@ -12,6 +12,16 @@ export type HostToRelay = {
     type: "session.event";
     event: SessionEvent;
 } | {
+    type: "session.policy";
+    requireApproval?: boolean;
+    repoRemote?: string | null;
+    allowedEmailDomain?: string | null;
+    additionalRepoRemotePrefixes?: string[] | null;
+    repoRemoteRewrites?: {
+        from: string;
+        to: string;
+    }[] | null;
+} | {
     type: "chat.send";
     content: string;
     displayName?: string;
@@ -23,6 +33,12 @@ export type HostToRelay = {
     userId: string;
 } | {
     type: "host.kick";
+    userId: string;
+} | {
+    type: "host.approve";
+    userId: string;
+} | {
+    type: "host.deny";
     userId: string;
 } | {
     type: "host.close";
@@ -51,6 +67,9 @@ export type RelayToHost = {
     type: "user.joined";
     user: ConnectedUser;
 } | {
+    type: "user.pending";
+    user: ConnectedUser;
+} | {
     type: "user.left";
     userId: string;
 } | {
@@ -60,6 +79,7 @@ export type RelayToHost = {
     type: "status";
     clients: number;
     running: boolean;
+    policy?: SessionPolicy;
 } | {
     type: "error";
     code: string;
