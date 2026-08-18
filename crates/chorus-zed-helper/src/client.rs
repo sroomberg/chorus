@@ -67,6 +67,7 @@ impl JoinClient {
         token: &str,
         display_name: &str,
         repo_remote: Option<&str>,
+        email: Option<&str>,
     ) -> Result<Self, String> {
         let name = display_name.trim();
         if name.is_empty() {
@@ -85,6 +86,10 @@ impl JoinClient {
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .map(str::to_string),
+            email: email
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_ascii_lowercase),
         };
         write
             .send(Message::Text(
@@ -361,12 +366,14 @@ mod tests {
             token: "abc123".into(),
             display_name: "Alice".into(),
             repo_remote: Some("https://github.com/acme/app.git".into()),
+            email: Some("alice@acme.com".into()),
         })
         .unwrap();
         assert_eq!(auth["type"], "auth");
         assert_eq!(auth["token"], "abc123");
         assert_eq!(auth["displayName"], "Alice");
         assert_eq!(auth["repoRemote"], "https://github.com/acme/app.git");
+        assert_eq!(auth["email"], "alice@acme.com");
 
         let chat = serde_json::to_value(ClientMessage::ChatSend {
             content: "hello chat".into(),

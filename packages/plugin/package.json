@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run test/access.test.ts test/backup.test.ts",
+"test": "vitest run test/access.test.ts test/backup.test.ts test/config.test.ts",
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },

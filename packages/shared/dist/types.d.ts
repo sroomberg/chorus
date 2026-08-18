@@ -13,6 +13,7 @@ export interface ConnectedUser {
     role: UserRole;
     joinedAt: number;
     displayName: string;
+    email?: string;
     status: UserStatus;
 }
 export interface SessionEvent {
@@ -51,10 +52,21 @@ export interface ShareInfo {
     sessionId: string;
     port: number;
 }
+/** Host/path substitution applied after a remote is reduced to `host/path`. */
+export interface RepoRemoteRewrite {
+    from: string;
+    to: string;
+}
 /** Session admission / binding policy set by the host plugin. */
 export interface SessionPolicy {
     requireApproval: boolean;
     /** Normalized or raw host git remote; absent/empty means no repo gate. */
     repoRemote?: string;
+    /** Joiners must use an email at this domain (e.g. acme.com). */
+    allowedEmailDomain?: string;
+    /** Extra URL prefixes stripped during remote normalization (e.g. `git://`). */
+    additionalRepoRemotePrefixes?: string[];
+    /** Host substitutions after prefix stripping (e.g. github.acme.com → github.com). */
+    repoRemoteRewrites?: RepoRemoteRewrite[];
 }
 //# sourceMappingURL=types.d.ts.map

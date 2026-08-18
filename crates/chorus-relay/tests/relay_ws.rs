@@ -1,5 +1,6 @@
 use chorus_relay::protocol::{
-    ClientMessage, HostToRelay, RelayToHost, ServerMessage, SessionEvent, UserRole,
+    ClientMessage, HostToRelay, RelayToHost, RepoRemoteRewrite, ServerMessage, SessionEvent,
+    UserRole,
 };
 use chorus_relay::server::{serve, RelayConfig};
 use futures_util::{SinkExt, StreamExt};
@@ -121,6 +122,7 @@ async fn join_authed(port: u16, token: String) -> WsStream {
             token,
             display_name: "joiner".into(),
             repo_remote: None,
+            email: None,
         })
         .unwrap()
         .into(),
@@ -151,6 +153,7 @@ async fn rejects_invalid_joiner_token() {
             token: "bad".into(),
             display_name: "X".into(),
             repo_remote: None,
+            email: None,
         })
         .unwrap()
         .into(),
@@ -196,6 +199,7 @@ async fn accepts_valid_token_and_sends_history() {
             token,
             display_name: "Alice".into(),
             repo_remote: None,
+            email: None,
         })
         .unwrap()
         .into(),
@@ -301,6 +305,7 @@ async fn requires_display_name() {
             token,
             display_name: "   ".into(),
             repo_remote: None,
+            email: None,
         })
         .unwrap()
         .into(),
@@ -339,6 +344,9 @@ async fn pending_until_host_approves() {
         serde_json::to_string(&HostToRelay::SessionPolicy {
             require_approval: Some(true),
             repo_remote: None,
+            allowed_email_domain: None,
+            additional_repo_remote_prefixes: None,
+            repo_remote_rewrites: None,
         })
         .unwrap()
         .into(),
@@ -355,6 +363,7 @@ async fn pending_until_host_approves() {
             token,
             display_name: "Pat".into(),
             repo_remote: None,
+            email: None,
         })
         .unwrap()
         .into(),
@@ -395,6 +404,9 @@ async fn rejects_mismatched_repo_remote() {
         serde_json::to_string(&HostToRelay::SessionPolicy {
             require_approval: Some(false),
             repo_remote: Some("https://github.com/acme/app.git".into()),
+            allowed_email_domain: None,
+            additional_repo_remote_prefixes: None,
+            repo_remote_rewrites: None,
         })
         .unwrap()
         .into(),
@@ -411,6 +423,7 @@ async fn rejects_mismatched_repo_remote() {
             token,
             display_name: "Eve".into(),
             repo_remote: Some("https://github.com/other/repo.git".into()),
+            email: None,
         })
         .unwrap()
         .into(),
@@ -437,4 +450,105 @@ async fn rejects_mismatched_repo_remote() {
         }
     }
     assert!(saw || close_code == Some(4004));
+}
+
+#[tokio::test]
+async fn rejects_mismatched_email_domain() {
+    let port = 18749;
+    start_relay(port, "secret").await;
+    let mut host = connect_host(port, "secret").await;
+
+    host.send(Message::Text(
+        serde_json::to_string(&HostToRelay::SessionPolicy {
+            require_approval: Some(false),
+            repo_remote: None,
+            allowed_email_domain: Some("acme.com".into()),
+            additional_repo_remote_prefixes: None,
+            repo_remote_rewrites: None,
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    let token = issue_token(&mut host, UserRole::Edit).await;
+    let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}/ws"))
+        .await
+        .unwrap();
+    ws.send(Message::Text(
+        serde_json::to_string(&ClientMessage::Auth {
+            token,
+            display_name: "Eve".into(),
+            repo_remote: None,
+            email: Some("eve@other.com".into()),
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    let mut saw = false;
+    let mut close_code = None;
+    while let Some(Ok(msg)) = ws.next().await {
+        match msg {
+            Message::Text(t) => {
+                if let Ok(ServerMessage::Error { code, .. }) = serde_json::from_str(&t) {
+                    if code == "EMAIL_ACCESS_DENIED" {
+                        saw = true;
+                    }
+                }
+            }
+            Message::Close(frame) => {
+                close_code = frame.map(|f| u16::from(f.code));
+                break;
+            }
+            _ => {}
+        }
+    }
+    assert!(saw || close_code == Some(4007));
+}
+
+#[tokio::test]
+async fn accepts_custom_remote_format_with_policy_prefix_and_rewrite() {
+    let port = 18750;
+    start_relay(port, "secret").await;
+    let mut host = connect_host(port, "secret").await;
+
+    host.send(Message::Text(
+        serde_json::to_string(&HostToRelay::SessionPolicy {
+            require_approval: Some(false),
+            repo_remote: Some("https://github.com/acme/app.git".into()),
+            allowed_email_domain: None,
+            additional_repo_remote_prefixes: Some(vec!["git://".into()]),
+            repo_remote_rewrites: Some(vec![RepoRemoteRewrite {
+                from: "github.acme.com".into(),
+                to: "github.com".into(),
+            }]),
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    let token = issue_token(&mut host, UserRole::Edit).await;
+    let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}/ws"))
+        .await
+        .unwrap();
+    ws.send(Message::Text(
+        serde_json::to_string(&ClientMessage::Auth {
+            token,
+            display_name: "Dev".into(),
+            repo_remote: Some("git://github.acme.com/acme/app.git".into()),
+            email: None,
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+
+    let _ = wait_for_server(&mut ws, |m| matches!(m, ServerMessage::SessionHistory { .. })).await;
 }

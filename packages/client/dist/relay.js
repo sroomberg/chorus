@@ -248,6 +248,9 @@ export class RelayServer {
             type: "session.policy",
             requireApproval: opts.requireApproval,
             repoRemote: opts.repoRemote === null ? "" : opts.repoRemote,
+            allowedEmailDomain: opts.allowedEmailDomain === null ? "" : opts.allowedEmailDomain,
+            additionalRepoRemotePrefixes: opts.additionalRepoRemotePrefixes ?? undefined,
+            repoRemoteRewrites: opts.repoRemoteRewrites ?? undefined,
         });
     }
     approveUser(userId) {

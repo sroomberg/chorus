@@ -44,6 +44,7 @@ export type ClientMessage = {
     token: string;
     displayName: string;
     repoRemote?: string;
+    email?: string;
 } | {
     type: "chat.send";
     content: string;
@@ -69,4 +70,7 @@ export declare function decodeServerMessage(raw: string): ServerMessage;
 export declare function decodeClientMessage(raw: string): ClientMessage;
 /** Non-empty trimmed display name, or null if invalid. */
 export declare function normalizeDisplayName(raw: string | undefined | null): string | null;
+/** Trimmed lowercase email, or null if invalid. */
+export declare function normalizeEmail(raw: string | undefined | null): string | null;
+export declare function emailMatchesDomain(email: string, allowedDomain: string): boolean;
 //# sourceMappingURL=protocol.d.ts.map

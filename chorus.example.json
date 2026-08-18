@@ -1,0 +1,23 @@
+{
+  "org": {
+    "name": "Example Engineering",
+    "policyNote": "Pair sessions require host approval and a matching git clone."
+  },
+  "security": {
+    "requireApproval": true,
+    "allowSkipApproval": false,
+    "requireRepoMatch": true,
+    "requireEmailDomainMatch": true,
+    "allowedEmailDomain": "acme.com",
+    "additionalRepoRemotePrefixes": ["git://"],
+    "repoRemoteRewrites": [{ "from": "github.acme.com", "to": "github.com" }],
+    "defaultRole": "edit",
+    "tokenTtlMs": 86400000
+  },
+  "relay": {
+    "port": 7742
+  },
+  "backup": {
+    "region": "us-east-1"
+  }
+}
