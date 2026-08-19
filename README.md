@@ -11,7 +11,7 @@ Collaborative OpenCode session sharing. Pair-program a live AI session from anot
 
 ## How it works
 
-Chorus is an [OpenCode](https://github.com/sst/opencode) plugin (plus VS Code / other adapters) and a **Rust WebSocket relay** (`chorus-relay`).
+Chorus is an [OpenCode](https://github.com/sst/opencode) plugin (plus a VS Code adapter) and a **Rust WebSocket relay** (`chorus-relay`).
 
 ```
 Host runs opencode                 → plugin loads
@@ -52,26 +52,21 @@ One monorepo, two ecosystems, one wire contract:
 | `packages/plugin` | npm `@chorus/plugin` | OpenCode plugin — tools, hooks, spawns/manages relay |
 | `packages/client` | npm `@chorus/client` | Shared `JoinClient` + `RelayServer` for host adapters |
 | `packages/vscode` | VS Code extension `chorus` | Share/join Chorus sessions from VS Code |
-| `packages/zed` | Zed extension `chorus` | Joiner adapter (WASM + MCP → `chorus-zed-helper`) |
 | `packages/shared` | npm `@chorus/shared` | TypeScript types + codecs for joiner and host-control protocols |
 | `crates/chorus-relay` | `chorus-relay` binary | Rust WebSocket relay (`/ws` joiners, `/host` control plane) |
-| `crates/chorus-zed-helper` | `chorus-zed-helper` binary | Native Chorus join client (CLI + MCP) for Zed |
 | `protocol/` | fixtures (not published) | Canonical JSON examples both TS and Rust must deserialize |
 
-Root `package.json` scripts are the only task entry (`build`, `test`, `typecheck`). Bun workspaces own `packages/*`; Cargo owns `crates/*` (Zed’s `packages/zed` is built separately for `wasm32-wasip2`).
+Root `package.json` scripts are the only task entry (`build`, `test`, `typecheck`). Bun workspaces own `packages/*`; Cargo owns `crates/*`.
 
 ## Development
 
 ```sh
 bun install
-bun run build          # release relay + helper + TS packages
-bun run test           # relay/helper tests + TS/Bun tests (includes protocol fixtures)
+bun run build          # release relay + TS packages
+bun run test           # relay tests + TS/Bun tests (includes protocol fixtures)
 bun run typecheck
 cargo test -p chorus-relay
-cargo test -p chorus-zed-helper
 ```
-
-Zed joiner (optional): see [packages/zed/README.md](packages/zed/README.md) for Install Dev Extension + `chorus-zed-helper` setup.
 
 ### Multi-agent local testing
 
