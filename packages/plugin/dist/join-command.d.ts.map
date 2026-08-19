@@ -1,0 +1,1 @@
+{"version":3,"file":"join-command.d.ts","sourceRoot":"","sources":["../src/join-command.ts"],"names":[],"mappings":"AAAA,uFAAuF;AACvF,eAAO,MAAM,qBAAqB,cAAc,CAAC;AAEjD,iFAAiF;AACjF,eAAO,MAAM,sBAAsB,iBAAiB,CAAC;AAErD,kFAAkF;AAClF,wBAAgB,iBAAiB,CAC/B,KAAK,EAAE,MAAM,EACb,IAAI,EAAE,MAAM,EACZ,IAAI,GAAE;IAAE,kBAAkB,CAAC,EAAE,MAAM,CAAA;CAAO,GACzC,MAAM,CAMR"}

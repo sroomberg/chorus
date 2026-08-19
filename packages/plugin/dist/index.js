@@ -1,5 +1,6 @@
 import { RelayServer, relayOptionsFromEnv } from "./relay/index.js";
 import { JoinClient } from "./join/index.js";
+import { formatJoinCommand } from "./join-command.js";
 import { S3BackupAdapter } from "./backup/index.js";
 import { detectRepoRemote } from "./git.js";
 import { loadChorusConfig, resolveDefaultRole, resolveRequireApproval, resolveAllowedEmailDomain, } from "./config/index.js";
@@ -401,9 +402,9 @@ export default async function chorusPlugin(input) {
                         ...(allowedEmailDomain ? { allowedEmailDomain } : {}),
                         ...(config.org.name ? { org: config.org.name } : {}),
                     };
-                    const joinCommand = allowedEmailDomain
-                        ? `/chorus-join token="${token.token}" host="${joinHost}" name="YOUR_NAME" email="you@${allowedEmailDomain}"`
-                        : `/chorus-join token="${token.token}" host="${joinHost}" name="YOUR_NAME"`;
+                    const joinCommand = formatJoinCommand(token.token, joinHost, {
+                        allowedEmailDomain,
+                    });
                     const policyNotes = [
                         config.org.name ? `Org: ${config.org.name}.` : null,
                         config.org.policyNote ?? null,
