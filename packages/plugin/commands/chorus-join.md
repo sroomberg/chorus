@@ -1,8 +1,11 @@
 ---
-description: Join a shared chorus session. Usage: /chorus-join <token> <host> <name>
+description: Join a shared chorus session. Usage: /chorus-join token="<token>" host="<host>" name="<display-name>" [email="<work-email>"]
 ---
 
-Parse the arguments "$ARGUMENTS" as: first word = token, second word = host (e.g. 192.168.1.5:7742), remaining words = display name (required).
-If the display name is missing, ask for one before calling the tool — do not invent a placeholder.
+Parse "$ARGUMENTS" as named fields `token`, `host`, `name`, and optional `email`.
+Also accept positional form: first word = token, second word = host, remaining words = display name.
+
+`name` is required. If it is missing, empty, or still the placeholder YOUR_NAME, ask for a real display name — do not invent one.
+If `email` is omitted, empty, wrapped in square brackets, or the placeholder `<work-email>`, omit email unless the host requires a company domain.
 Use the chorus-join tool with those values.
 If the tool returns pending=true, tell the user to wait for the host to approve.
