@@ -1,0 +1,162 @@
+{
+  "name": "chorus",
+  "displayName": "Chorus",
+  "description": "Pair-program a live Chorus AI session from VS Code — share or join over chorus-relay.",
+  "version": "0.1.0",
+  "publisher": "chorus",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Chat", "Other"],
+  "activationEvents": [
+    "onCommand:chorus.share",
+    "onCommand:chorus.join",
+    "onCommand:chorus.leave",
+    "onCommand:chorus.stop",
+    "onCommand:chorus.chat",
+    "onCommand:chorus.status",
+    "onCommand:chorus.sendPrompt",
+    "onCommand:chorus.publishHostMessage",
+    "onCommand:chorus.approve",
+    "onCommand:chorus.deny",
+    "onView:chorus.session"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "chorus.share",
+        "title": "Chorus: Share Session",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.join",
+        "title": "Chorus: Join Session",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.leave",
+        "title": "Chorus: Leave Session",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.stop",
+        "title": "Chorus: Stop Sharing",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.chat",
+        "title": "Chorus: Send Chat Message",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.status",
+        "title": "Chorus: Show Status",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.sendPrompt",
+        "title": "Chorus: Send Prompt to Host",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.publishHostMessage",
+        "title": "Chorus: Publish Host Message",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.openSession",
+        "title": "Chorus: Open Session Panel",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.approve",
+        "title": "Chorus: Approve Joiner",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.deny",
+        "title": "Chorus: Deny Joiner",
+        "category": "Chorus"
+      }
+    ],
+    "configuration": {
+      "title": "Chorus",
+      "properties": {
+        "chorus.port": {
+          "type": "number",
+          "default": 7742,
+          "description": "Default chorus-relay listen port when sharing."
+        },
+        "chorus.displayName": {
+          "type": "string",
+          "default": "",
+          "description": "Display name shown to collaborators (required non-empty; defaults to OS username)."
+        },
+        "chorus.requireApproval": {
+          "type": "boolean",
+          "default": true,
+          "description": "When sharing, hold joiners in pending until Approve/Deny (matches OpenCode plugin default)."
+        },
+        "chorus.email": {
+          "type": "string",
+          "default": "",
+          "description": "Joiner email sent on auth when the host enabled an allowedEmailDomain gate."
+        },
+        "chorus.allowedEmailDomain": {
+          "type": "string",
+          "default": "",
+          "description": "When sharing, require joiners to authenticate with an email at this domain."
+        },
+        "chorus.relayBin": {
+          "type": "string",
+          "default": "",
+          "description": "Path to chorus-relay binary (overrides CHORUS_RELAY_BIN / PATH)."
+        },
+        "chorus.publicHost": {
+          "type": "string",
+          "default": "",
+          "description": "Host:port advertised in join commands (overrides CHORUS_PUBLIC_HOST)."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "chorus",
+          "title": "Chorus",
+          "icon": "media/chorus.svg"
+        }
+      ]
+    },
+    "views": {
+      "chorus": [
+        {
+          "type": "webview",
+          "id": "chorus.session",
+          "name": "Session"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsc -p ./",
+    "typecheck": "tsc -p ./ --noEmit",
+    "watch": "tsc -p ./ -w",
+    "test": "bun test test/format.test.ts",
+    "clean": "rm -rf dist",
+    "package": "npm run build"
+  },
+  "dependencies": {
+    "@chorus/client": "workspace:*",
+    "@chorus/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.7.3"
+  }
+}

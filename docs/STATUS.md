@@ -14,6 +14,8 @@ Chorus is an **OpenCode↔OpenCode** LAN collaboration stack:
 The browser companion (`packages/web`) was intentionally removed. Joiners now mirror the host transcript into their OpenCode session (`[Host]:` / `[AI]:` lines via `noReply` inject); side-channel chat/typing remain toasts.
 The in-process Bun relay has been replaced by `crates/chorus-relay`.
 
+**Editor adapters (in progress):** VS Code (`packages/vscode`).
+
 Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`, `opencode-ensemble`, `opencode-relay`): those target **multi-agent / same-DB sync**. Chorus targets **multi-human** pair programming on one live AI session.
 
 ## Priority backlog
@@ -65,8 +67,14 @@ Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`
 
 `scripts/multi-agent.ts` (via `bun run multi-agent`) can spawn N isolated `opencode serve` instances with the Chorus plugin, then automate `/chorus-share` + `/chorus-join` through OpenCode’s `/session/:id/command` API. Also includes `relay-stress` for concurrent protocol joiners without OpenCode.
 
+## Adapter surface (monorepo)
+
+- **OpenCode** (`packages/plugin`) — primary host; full LLM loop + transcript mirror.
+- **VS Code** (`packages/vscode`) — share/join via `@chorus/client`; sidebar transcript; joiner `collab.input` works against an OpenCode host. VS Code share does **not** drive OpenCode’s model — publish host lines manually or pair with OpenCode.
+
 ## Explicit non-goals (for now)
 
 - Rebuilding a full coding agent harness from scratch.
 - Competing with multi-agent orchestration plugins.
 - Making the browser app the primary UX again (optional later for non-OpenCode observers).
+- Splitting the monorepo until adapter publish cadence actually diverges.

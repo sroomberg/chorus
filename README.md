@@ -11,7 +11,7 @@ Collaborative OpenCode session sharing. Pair-program a live AI session from anot
 
 ## How it works
 
-Chorus is an [OpenCode](https://github.com/sst/opencode) plugin plus a **Rust WebSocket relay** (`chorus-relay`).
+Chorus is an [OpenCode](https://github.com/sst/opencode) plugin (plus a VS Code adapter) and a **Rust WebSocket relay** (`chorus-relay`).
 
 ```
 Host runs opencode                 → plugin loads
@@ -50,6 +50,8 @@ One monorepo, two ecosystems, one wire contract:
 | Path | Artifact | Description |
 |---|---|---|
 | `packages/plugin` | npm `@chorus/plugin` | OpenCode plugin — tools, hooks, spawns/manages relay |
+| `packages/client` | npm `@chorus/client` | Shared `JoinClient` + `RelayServer` for host adapters |
+| `packages/vscode` | VS Code extension `chorus` | Share/join Chorus sessions from VS Code |
 | `packages/shared` | npm `@chorus/shared` | TypeScript types + codecs for joiner and host-control protocols |
 | `crates/chorus-relay` | `chorus-relay` binary | Rust WebSocket relay (`/ws` joiners, `/host` control plane) |
 | `protocol/` | fixtures (not published) | Canonical JSON examples both TS and Rust must deserialize |

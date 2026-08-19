@@ -84,9 +84,9 @@ export default function chorusPlugin(input: PluginInput): Promise<{
             description: string;
             args: {
                 role: z.ZodOptional<z.ZodEnum<{
-                    admin: "admin";
                     edit: "edit";
                     view: "view";
+                    admin: "admin";
                 }>>;
                 requireApproval: z.ZodOptional<z.ZodBoolean>;
             };
