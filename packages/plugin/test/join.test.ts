@@ -58,8 +58,14 @@ describe("JoinClient (via Rust relay)", () => {
 
     const token = (await relay.issueToken("sess-1", "view")).token;
     const jc = new JoinClient(`ws://localhost:${TEST_PORT}/ws`, token, "Bob");
+    const replayed: string[] = [];
+    jc.setApprovedHandler(() => {
+      replayed.push(...jc.getState().recentEvents.map((e) => e.id));
+    });
     await jc.connect();
+    expect(jc.getState().status).toBe("connected");
     expect(jc.getState().recentEvents).toHaveLength(1);
+    expect(replayed).toContain("e1");
     jc.disconnect();
   });
 

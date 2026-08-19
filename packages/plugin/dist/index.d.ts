@@ -63,9 +63,35 @@ interface ToolContext {
     directory: string;
 }
 export default function chorusPlugin(input: PluginInput): Promise<{
+    /**
+     * Backup for host prompts that miss chat.message (busy session / attach TUI).
+     * Deduped against chat.message and collab.input fan-out.
+     */
+    event: (hookInput: {
+        event: {
+            type: string;
+            properties?: {
+                info?: {
+                    id?: string;
+                    role?: string;
+                };
+                part?: {
+                    type?: string;
+                    text?: string;
+                    synthetic?: boolean;
+                    messageID?: string;
+                    sessionID?: string;
+                };
+            };
+        };
+    }) => Promise<void>;
     "chat.message": (chatInput: {
         sessionID: string;
+        messageID?: string;
     }, output: {
+        message?: {
+            id?: string;
+        };
         parts: Array<{
             type: string;
             text?: string;

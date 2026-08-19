@@ -16,7 +16,7 @@ import {
 describe("parseChorusConfig", () => {
   it("applies defaults for an empty object", () => {
     const cfg = parseChorusConfig({});
-    expect(cfg.security.requireApproval).toBe(true);
+    expect(cfg.security.requireApproval).toBe(false);
     expect(cfg.security.allowSkipApproval).toBe(true);
     expect(cfg.security.requireRepoMatch).toBe(false);
     expect(cfg.security.requireEmailDomainMatch).toBe(false);
@@ -73,7 +73,7 @@ describe("mergeConfigPartial", () => {
 
 describe("resolveRequireApproval / resolveDefaultRole", () => {
   it("uses config default when tool arg omitted", () => {
-    expect(resolveRequireApproval(DEFAULT_CHORUS_CONFIG.security, undefined)).toBe(true);
+    expect(resolveRequireApproval(DEFAULT_CHORUS_CONFIG.security, undefined)).toBe(false);
     expect(resolveDefaultRole(DEFAULT_CHORUS_CONFIG.security, undefined)).toBe("edit");
   });
 

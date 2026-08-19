@@ -5,6 +5,7 @@ import { S3BackupAdapter } from "./backup/index.js";
 import { detectRepoRemote } from "./git.js";
 import { loadChorusConfig, resolveDefaultRole, resolveRequireApproval, resolveAllowedEmailDomain, } from "./config/index.js";
 import { normalizeDisplayName, normalizeEmail } from "@chorus/shared";
+import { MIRROR_LINE, formatMirroredEvent, isChorusControlText, shouldFanOutHostUserText, shouldForwardJoinerInput, shouldPublishAssistantText, userTextFromParts, } from "./transcript.js";
 import { networkInterfaces } from "node:os";
 import { mkdirSync, existsSync, copyFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -101,8 +102,12 @@ export default async function chorusPlugin(input) {
     const mirroredEventIds = new Set();
     /** Texts this joiner recently forwarded — skip mirroring our own labeled echo. */
     const recentlyForwarded = new Set();
-    const MIRROR_LINE = /^\[(AI|Host)\]:/;
-    const LABELED_LINE = /^\[[^\]]+\]:\s/;
+    /** Host user messages already fanned out (chat.message vs event hook vs collab handler). */
+    const publishedUserKeys = new Set();
+    const recentUserPayloadAt = new Map();
+    const USER_PAYLOAD_DEDUPE_MS = 2500;
+    /** User message ids observed while sharing — used by the event-hook backup path. */
+    const hostUserMessageIds = new Set();
     function toast(message, variant = "info", duration = 4000) {
         input.client.tui.showToast({ body: { message, variant, duration } }).catch(() => { });
     }
@@ -115,25 +120,47 @@ export default async function chorusPlugin(input) {
         })
             .catch(() => { });
     }
-    function formatMirroredEvent(event) {
-        const payload = typeof event.payload === "string" ? event.payload : JSON.stringify(event.payload);
-        if (event.type === "user") {
-            // Collaborator lines are already `[name]: …` from the host — keep for all agents.
-            if (LABELED_LINE.test(payload))
-                return payload;
-            return `[Host]: ${payload}`;
+    function rememberSet(set, value, max = 400) {
+        if (set.has(value))
+            return false;
+        set.add(value);
+        if (set.size > max) {
+            const first = set.values().next().value;
+            if (first !== undefined)
+                set.delete(first);
         }
-        if (event.type === "assistant")
-            return `[AI]: ${payload}`;
-        return null;
+        return true;
     }
     function rememberMirrored(id) {
-        mirroredEventIds.add(id);
-        if (mirroredEventIds.size > 400) {
-            const first = mirroredEventIds.values().next().value;
+        rememberSet(mirroredEventIds, id);
+    }
+    function publishSessionUserEvent(sid, text, messageId) {
+        if (!sharing || !sid || !text)
+            return false;
+        if (MIRROR_LINE.test(text.trim()))
+            return false;
+        if (messageId && !rememberSet(publishedUserKeys, `id:${messageId}`))
+            return false;
+        const now = Date.now();
+        const last = recentUserPayloadAt.get(text);
+        if (last !== undefined && now - last < USER_PAYLOAD_DEDUPE_MS)
+            return false;
+        recentUserPayloadAt.set(text, now);
+        if (recentUserPayloadAt.size > 400) {
+            const first = recentUserPayloadAt.keys().next().value;
             if (first !== undefined)
-                mirroredEventIds.delete(first);
+                recentUserPayloadAt.delete(first);
         }
+        const event = {
+            id: messageId ?? `${now}-${Math.random().toString(36).slice(2)}`,
+            sessionId: sid,
+            type: "user",
+            payload: text,
+            timestamp: now,
+        };
+        events.push(event);
+        relay.pushEvent(event);
+        return true;
     }
     function noteForwarded(text) {
         recentlyForwarded.add(text);
@@ -167,9 +194,7 @@ export default async function chorusPlugin(input) {
     /**
      * Inject a shared-session event into this joiner's OpenCode transcript (no LLM).
      * Never run while sharing — that feedback-loops the host into itself.
-     *
-     * Prefer the web UI on the agent port for live view; attach TUI often misses
-     * injects (upstream). We still toast + nudge after each write.
+     * Parts are not marked synthetic: OpenCode hides those from the session UI.
      */
     function mirrorEventToJoiner(event) {
         if (sharing)
@@ -197,7 +222,9 @@ export default async function chorusPlugin(input) {
                     path: { id: joinSessionId },
                     body: {
                         noReply: true,
-                        parts: [{ type: "text", text, synthetic: true }],
+                        // Do not mark synthetic: OpenCode hides synthetic parts from TUI/web UI.
+                        // Echo is prevented by [Host]/[AI] prefixes in chat.message.
+                        parts: [{ type: "text", text }],
                     },
                 });
             }
@@ -209,38 +236,23 @@ export default async function chorusPlugin(input) {
         })
             .catch(() => { });
     }
-    // Track when we're injecting a collab message so chat.message can skip auto-push
-    let pendingCollabInject = false;
     relay.setInputHandler(async (content, userId, displayName) => {
         if (!sessionId)
             return;
-        // Joiner echoed a mirrored transcript line — drop it.
-        if (MIRROR_LINE.test(content.trim()))
+        const trimmed = content.trim();
+        // Joiner echoed a mirrored line or forwarded a /chorus-* command — drop it.
+        if (MIRROR_LINE.test(trimmed) || isChorusControlText(trimmed))
             return;
         const label = displayName ?? userId.slice(0, 8);
         const labeled = `[${label}]: ${content}`;
-        pendingCollabInject = true;
-        try {
-            await input.client.session.prompt({
-                throwOnError: true,
-                path: { id: sessionId },
-                body: { parts: [{ type: "text", text: labeled }] },
-            });
-        }
-        finally {
-            pendingCollabInject = false;
-        }
-        // Fan out collaborator prompts to every joiner (pendingCollabInject skips
-        // the chat.message auto-push, so publish explicitly).
-        const event = {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            sessionId,
-            type: "user",
-            payload: labeled,
-            timestamp: Date.now(),
-        };
-        events.push(event);
-        relay.pushEvent(event);
+        // Fan out immediately — do not wait on the host LLM turn, and do not hold
+        // a skip-flag that would drop a concurrent host prompt.
+        publishSessionUserEvent(sessionId, labeled);
+        await input.client.session.prompt({
+            throwOnError: true,
+            path: { id: sessionId },
+            body: { parts: [{ type: "text", text: labeled }] },
+        });
     });
     relay.setChatHandler((displayName, content) => {
         toast(`[${displayName ?? "guest"}]: ${content}`);
@@ -263,6 +275,44 @@ export default async function chorusPlugin(input) {
         toast(`User left (${userId.slice(0, 8)}…)`, "info", 3000);
     });
     return {
+        /**
+         * Backup for host prompts that miss chat.message (busy session / attach TUI).
+         * Deduped against chat.message and collab.input fan-out.
+         */
+        event: async (hookInput) => {
+            if (!sharing)
+                return;
+            const ev = hookInput.event;
+            if (ev.type === "message.updated") {
+                const info = ev.properties?.info;
+                if (info?.role === "user" && typeof info.id === "string") {
+                    rememberSet(hostUserMessageIds, info.id);
+                }
+                return;
+            }
+            if (ev.type !== "message.part.updated")
+                return;
+            const part = ev.properties?.part;
+            if (!part || part.type !== "text" || part.synthetic)
+                return;
+            if (typeof part.text !== "string" || !part.text)
+                return;
+            if (!part.messageID || !hostUserMessageIds.has(part.messageID))
+                return;
+            if (!shouldFanOutHostUserText(part.text))
+                return;
+            const sid = part.sessionID || sessionId;
+            if (publishSessionUserEvent(sid, part.text, part.messageID) && backup) {
+                backup
+                    .save({
+                    sessionId: sid,
+                    events,
+                    messages: [],
+                    startedAt: events[0]?.timestamp ?? Date.now(),
+                })
+                    .catch(console.error);
+            }
+        },
         "chat.message": async (chatInput, output) => {
             sessionId = chatInput.sessionID;
             if (joinClient)
@@ -270,13 +320,10 @@ export default async function chorusPlugin(input) {
             if (joinClient) {
                 const state = joinClient.getState();
                 if (state.status === "connected") {
-                    // Mirrored host/AI lines are synthetic / pendingRemoteInject — do not echo back.
+                    // Mirrored [Host]/[AI] lines must not be forwarded back over collab.input.
                     if (!pendingRemoteInject) {
-                        const text = output.parts
-                            .filter((p) => p.type === "text" && !p.synthetic)
-                            .map((p) => p.text ?? "")
-                            .join("\n");
-                        if (text && !MIRROR_LINE.test(text.trim())) {
+                        const text = userTextFromParts(output.parts);
+                        if (shouldForwardJoinerInput(text)) {
                             noteForwarded(text);
                             joinClient.sendInput(text);
                             // One shared brain: cancel the joiner's local LLM; wait for mirrored host AI.
@@ -287,22 +334,12 @@ export default async function chorusPlugin(input) {
             }
             if (!sharing)
                 return;
-            const text = output.parts
-                .filter((p) => p.type === "text" && !p.synthetic)
-                .map((p) => p.text ?? "")
-                .join("\n");
-            // Skip collab-injected, synthetic, and mirrored transcript lines
-            if (!text || pendingCollabInject || MIRROR_LINE.test(text.trim()))
+            const text = userTextFromParts(output.parts);
+            if (!shouldFanOutHostUserText(text))
                 return;
-            const event = {
-                id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                sessionId: chatInput.sessionID,
-                type: "user",
-                payload: text,
-                timestamp: Date.now(),
-            };
-            events.push(event);
-            relay.pushEvent(event);
+            const messageId = output.message?.id ?? chatInput.messageID;
+            if (!publishSessionUserEvent(chatInput.sessionID, text, messageId))
+                return;
             if (backup) {
                 backup
                     .save({
@@ -316,7 +353,7 @@ export default async function chorusPlugin(input) {
         },
         "experimental.text.complete": async (hookInput, hookOutput) => {
             sessionId = hookInput.sessionID;
-            if (!sharing || !hookOutput.text)
+            if (!sharing || !shouldPublishAssistantText(hookOutput.text))
                 return;
             const event = {
                 id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -492,16 +529,6 @@ export default async function chorusPlugin(input) {
                     mirroredEventIds.clear();
                     const repoRemote = detectRepoRemote(context.directory);
                     const jc = new JoinClient(`ws://${args.host}/ws`, args.token, displayName, repoRemote, email ?? undefined);
-                    try {
-                        await jc.connect();
-                    }
-                    catch (err) {
-                        joinSessionId = "";
-                        return JSON.stringify({
-                            joined: false,
-                            error: err instanceof Error ? err.message : String(err),
-                        });
-                    }
                     jc.setChatHandler((msgDisplayName, content) => {
                         toast(`[${msgDisplayName ?? "host"}]: ${content}`);
                     });
@@ -518,13 +545,26 @@ export default async function chorusPlugin(input) {
                     jc.setEventHandler((event) => {
                         mirrorEventToJoiner(event);
                     });
+                    // Assign before connect so history replay / live events during handshake
+                    // are not dropped by mirrorEventToJoiner's joinClient guard.
+                    joinClient = jc;
+                    try {
+                        await jc.connect();
+                    }
+                    catch (err) {
+                        joinClient = null;
+                        joinSessionId = "";
+                        return JSON.stringify({
+                            joined: false,
+                            error: err instanceof Error ? err.message : String(err),
+                        });
+                    }
                     // Replay buffered history once active (immediate when approval is off).
                     if (jc.getState().status === "connected") {
                         for (const event of jc.getState().recentEvents) {
                             mirrorEventToJoiner(event);
                         }
                     }
-                    joinClient = jc;
                     const state = jc.getState();
                     if (state.status === "pending") {
                         return JSON.stringify({
