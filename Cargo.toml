@@ -1,8 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/chorus-relay", "crates/chorus-zed-helper"]
-exclude = ["packages/zed"]
-# packages/zed is a standalone Zed extension (wasm32-wasip2) built by Zed / cargo --target.
+members = ["crates/chorus-relay"]
 
 [workspace.package]
 edition = "2021"
