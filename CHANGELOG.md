@@ -7,6 +7,7 @@
 - Security: display name required on join (reject empty / whitespace)
 - Security: when the host share directory has a git `origin`, bind the session to that remote and reject joiners who are not in a matching clone (soft claim check, not provider ACL)
 - Host tool: `chorus-kick` for active joiners
+- `/chorus-share` join command includes `name="YOUR_NAME"` and optional `[email="<work-email>"]` for the collaborator to fill in
 - Real-time shared transcript for all agents: fan out collaborator prompts to every joiner, abort joiner local LLM, mirror `[Host]`/`[name]`/`[AI]` (prefer web UI for live view)
 - Joiner mirrors host prompts and AI replies into its OpenCode session transcript (`[Host]:` / `[AI]:`), including history replay on join (replaces toast-only viewing)
 - Fix: prevent host/joiner feedback loop when the same agent both shares and joins (block join while sharing; never mirror while hosting; drop echoed `[AI]/`/`[Host]:` collab lines)
