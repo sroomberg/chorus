@@ -14,7 +14,7 @@ Chorus is an **OpenCode↔OpenCode** LAN collaboration stack:
 The browser companion (`packages/web`) was intentionally removed. Joiners now mirror the host transcript into their OpenCode session (`[Host]:` / `[AI]:` lines via `noReply` inject); side-channel chat/typing remain toasts.
 The in-process Bun relay has been replaced by `crates/chorus-relay`.
 
-**Editor adapters (in progress):** VS Code (`packages/vscode`) and Zed (`packages/zed` + `crates/chorus-zed-helper`). Zed v1 is **joiner-only** via MCP/CLI — no host share and no OpenCode transcript injection.
+**Editor adapters (in progress):** VS Code (`packages/vscode`).
 
 Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`, `opencode-ensemble`, `opencode-relay`): those target **multi-agent / same-DB sync**. Chorus targets **multi-human** pair programming on one live AI session.
 
@@ -81,7 +81,6 @@ Enterprise gap analysis (what would actually pass a security review vs what ship
 
 - **OpenCode** (`packages/plugin`) — primary host; full LLM loop + transcript mirror.
 - **VS Code** (`packages/vscode`) — share/join via `@chorus/client`; sidebar transcript; joiner `collab.input` works against an OpenCode host. VS Code share does **not** drive OpenCode’s model — publish host lines manually or pair with OpenCode.
-- **Zed** — joiner-first scaffold when present under `packages/zed` / related crates (WASM extension limits; helper binary pattern).
 
 ## Explicit non-goals (for now)
 

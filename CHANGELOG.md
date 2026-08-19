@@ -5,6 +5,8 @@
 - VS Code extension (`packages/vscode`) — share/join/chat over the same relay protocol; Session sidebar + commands
 - Extract `@chorus/client` (`JoinClient` + `RelayServer`) shared by OpenCode plugin, VS Code, and future adapters
 - Cross-adapter relay e2e: VS Code host ↔ terminal joiner and terminal host ↔ VS Code joiner (`bun run test:vscode-relay-e2e`)
+- Session access control: host approval, required display names, repo/email/domain gates (`session.policy` / `auth.pending` / `host.approve|deny`)
+- Hybrid OpenCode security e2e, VS Code adapter e2e, and Cloud Agent install script
 
 ## v2.0.0 — 2026-08-21
 
@@ -126,6 +128,20 @@ Prefer the **OpenCode web UI** for live mirrored lines. `opencode attach` often 
 | `CHORUS_AWS_BUCKET` | — | Optional S3/R2 session backup |
 
 Full tables: [README](https://github.com/sroomberg/chorus/blob/main/README.md). Status and backlog: [docs/STATUS.md](https://github.com/sroomberg/chorus/blob/main/docs/STATUS.md). Enterprise gaps: [docs/ENTERPRISE.md](https://github.com/sroomberg/chorus/blob/main/docs/ENTERPRISE.md).
+=======
+- Session access control: host approval, required display names, repo/email/domain gates (`session.policy` / `auth.pending` / `host.approve|deny`)
+- Configurable git remote prefixes and host rewrites; layered `chorus.json` org settings
+- Hybrid OpenCode security e2e, VS Code adapter e2e, and Cloud Agent install script
+- VS Code extension (`packages/vscode`) — share/join/chat; Session sidebar; approve/deny
+- Extract `@chorus/client` (`JoinClient` + `RelayServer`) for reuse by OpenCode, VS Code, and future adapters
+- Real-time shared transcript for all agents: fan out collaborator prompts to every joiner, abort joiner local LLM, mirror `[Host]`/`[name]`/`[AI]` (prefer web UI for live view)
+- Joiner mirrors host prompts and AI replies into its OpenCode session transcript (`[Host]:` / `[AI]:`), including history replay on join (replaces toast-only viewing)
+- Fix: prevent host/joiner feedback loop when the same agent both shares and joins (block join while sharing; never mirror while hosting; drop echoed `[AI]`/`[Host]:` collab lines)
+- Replace in-process Bun WebSocket relay with Rust `chorus-relay` binary (`crates/chorus-relay`)
+- Host control protocol on `/host` (token issue, session events, chat, collab.input fan-in)
+- Joiner protocol on `/ws` unchanged
+- Plugin spawns/manages the relay subprocess (`CHORUS_RELAY_BIN` override)
+>>>>>>> a29eb58 (Remove the Zed adapter from this pull request.)
 
 ## v0.1.6 — 2026-05-27
 
