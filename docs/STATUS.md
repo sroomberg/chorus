@@ -41,7 +41,7 @@ Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`
 
 ### Security shipped (this pass)
 
-- Host approval gate (`requireApproval`, default on for `/chorus-share`; `chorus-approve` / `chorus-deny`)
+- Host approval gate (`requireApproval`, default off for `/chorus-share`; `chorus-approve` / `chorus-deny`)
 - Required display name on join (no anonymous / empty names)
 - Git origin binding when the host share directory has a remote (joiner must present matching remote)
 - `chorus-kick` for active joiners

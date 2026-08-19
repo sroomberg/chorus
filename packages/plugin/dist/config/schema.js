@@ -2,7 +2,7 @@ import { z } from "zod";
 /** Role granted to new share tokens when the host omits an explicit role. */
 export const chorusRoleSchema = z.enum(["edit", "view", "admin"]);
 const securityDefaults = {
-    requireApproval: true,
+    requireApproval: false,
     allowSkipApproval: true,
     requireRepoMatch: false,
     requireEmailDomainMatch: false,

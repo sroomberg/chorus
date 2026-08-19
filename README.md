@@ -141,7 +141,7 @@ Copy [chorus.example.json](./chorus.example.json) to get started. Example enterp
 
 | Field | Default | Description |
 |---|---|---|
-| `security.requireApproval` | `true` | Joiners pending until host approve/deny |
+| `security.requireApproval` | `false` | Joiners pending until host approve/deny |
 | `security.allowSkipApproval` | `true` | If `false`, tool args cannot turn approval off |
 | `security.requireRepoMatch` | `false` | If `true`, share fails without a git `origin` |
 | `security.requireEmailDomainMatch` | `false` | If `true`, share fails unless `allowedEmailDomain` is set; joiners must use that domain |
@@ -179,7 +179,7 @@ Copy [chorus.example.json](./chorus.example.json) to get started. Example enterp
 |---|---|
 | Join token | Still required; issued by `/chorus-share` with a role |
 | Display name | **Required** on `/chorus-join` — empty names are rejected |
-| Host approval | Config `security.requireApproval` (default on); joiner stays pending until `/chorus-approve` |
+| Host approval | Config `security.requireApproval` (default off); when on, joiner stays pending until `/chorus-approve` |
 | Git repo gate | If the host share directory has `origin` (or `requireRepoMatch`), joiners must present the same remote. Extra prefixes/rewrites come from `additionalRepoRemotePrefixes` / `repoRemoteRewrites`. |
 | Company email gate | If `allowedEmailDomain` is set (or `requireEmailDomainMatch`), joiners must auth with an email at that domain |
 | Kick | `/chorus-kick <userId>` disconnects an active joiner |
