@@ -4,9 +4,8 @@
 
 - Session access control: host approval, required display names, repo/email/domain gates (`session.policy` / `auth.pending` / `host.approve|deny`)
 - Configurable git remote prefixes and host rewrites; layered `chorus.json` org settings
-- Hybrid OpenCode security e2e, VS Code/Zed adapter e2e, and Cloud Agent install script
+- Hybrid OpenCode security e2e, VS Code adapter e2e, and Cloud Agent install script
 - VS Code extension (`packages/vscode`) — share/join/chat; Session sidebar; approve/deny
-- Zed joiner extension (`packages/zed`) + `chorus-zed-helper` (MCP/CLI)
 - Extract `@chorus/client` (`JoinClient` + `RelayServer`) for reuse by OpenCode, VS Code, and future adapters
 - Real-time shared transcript for all agents: fan out collaborator prompts to every joiner, abort joiner local LLM, mirror `[Host]`/`[name]`/`[AI]` (prefer web UI for live view)
 - Joiner mirrors host prompts and AI replies into its OpenCode session transcript (`[Host]:` / `[AI]:`), including history replay on join (replaces toast-only viewing)
