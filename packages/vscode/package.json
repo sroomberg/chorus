@@ -22,7 +22,10 @@
     "onCommand:chorus.publishHostMessage",
     "onCommand:chorus.approve",
     "onCommand:chorus.deny",
-    "onView:chorus.session"
+    "onCommand:chorus.openChatWindow",
+    "onCommand:chorus.openAgentWindow",
+    "onCommand:chorus.openCollaborationWindows",
+    "onView:chorus.relay"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -69,7 +72,22 @@
       },
       {
         "command": "chorus.openSession",
-        "title": "Chorus: Open Session Panel",
+        "title": "Chorus: Open Relay Panel",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.openChatWindow",
+        "title": "Chorus: Open Chat Window",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.openAgentWindow",
+        "title": "Chorus: Open Agent Window",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.openCollaborationWindows",
+        "title": "Chorus: Open Chat and Agent Windows",
         "category": "Chorus"
       },
       {
@@ -136,8 +154,8 @@
       "chorus": [
         {
           "type": "webview",
-          "id": "chorus.session",
-          "name": "Session"
+          "id": "chorus.relay",
+          "name": "Relay"
         }
       ]
     }
@@ -146,7 +164,7 @@
     "build": "tsc -p ./",
     "typecheck": "tsc -p ./ --noEmit",
     "watch": "tsc -p ./ -w",
-    "test": "bun test test/format.test.ts",
+    "test": "bun test test/format.test.ts test/ui.test.ts",
     "clean": "rm -rf dist",
     "package": "npm run build"
   },

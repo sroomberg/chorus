@@ -1,28 +1,46 @@
 import * as vscode from "vscode";
 import { ChorusController } from "./controller.js";
-import { SessionViewProvider } from "./sessionView.js";
+import { RelayViewProvider } from "./relayView.js";
+import { CollaborationWindows } from "./collaborationWindows.js";
 export function activate(context) {
     const output = vscode.window.createOutputChannel("Chorus");
     const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
     statusBar.show();
     const controller = new ChorusController(output, statusBar);
-    const viewProvider = new SessionViewProvider(controller);
-    context.subscriptions.push(output, statusBar, controller, vscode.window.registerWebviewViewProvider(SessionViewProvider.viewType, viewProvider));
-    context.subscriptions.push(vscode.commands.registerCommand("chorus.share", async () => {
+    const relayView = new RelayViewProvider(controller);
+    const windows = new CollaborationWindows(controller);
+    context.subscriptions.push(output, statusBar, controller, windows, vscode.window.registerWebviewViewProvider(RelayViewProvider.viewType, relayView));
+    context.subscriptions.push(vscode.commands.registerCommand("chorus.share", async (roleArg) => {
         try {
-            const rolePick = await vscode.window.showQuickPick([
-                { label: "edit", description: "Can send prompts (default)" },
-                { label: "view", description: "Read-only" },
-                { label: "admin", description: "Full control" },
-            ], { title: "Chorus share role for join token" });
-            const role = (rolePick?.label ?? "edit");
+            let role = roleArg;
+            if (role !== "edit" && role !== "view" && role !== "admin") {
+                const rolePick = await vscode.window.showQuickPick([
+                    { label: "edit", description: "Can send prompts (default)" },
+                    { label: "view", description: "Read-only" },
+                    { label: "admin", description: "Full control" },
+                ], { title: "Chorus share role for join token" });
+                role = (rolePick?.label ?? "edit");
+            }
             const joinCommand = await controller.share(role);
             output.show(true);
-            void vscode.commands.executeCommand("chorus.session.focus");
+            await windows.openBoth();
             return joinCommand;
         }
         catch (err) {
             void vscode.window.showErrorMessage(`Chorus share failed: ${String(err)}`);
+        }
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("chorus.joinWithArgs", async (token, host, name) => {
+        try {
+            await controller.join(token, host, name);
+            output.show(true);
+            await windows.openBoth();
+            const mode = controller.getMode();
+            void vscode.window.showInformationMessage(mode === "pending" ? "Connected — waiting for host approval" : "Joined Chorus session");
+        }
+        catch (err) {
+            void vscode.window.showErrorMessage(`Chorus join failed: ${String(err)}`);
+            throw err;
         }
     }));
     context.subscriptions.push(vscode.commands.registerCommand("chorus.join", async () => {
@@ -52,10 +70,7 @@ export function activate(context) {
                 void vscode.window.showErrorMessage("Display name is required.");
                 return;
             }
-            await controller.join(token.trim(), host.trim(), name?.trim() || undefined);
-            output.show(true);
-            const mode = controller.getMode();
-            void vscode.window.showInformationMessage(mode === "pending" ? "Connected — waiting for host approval" : "Joined Chorus session");
+            await vscode.commands.executeCommand("chorus.joinWithArgs", token.trim(), host.trim(), name?.trim());
         }
         catch (err) {
             void vscode.window.showErrorMessage(`Chorus join failed: ${String(err)}`);
@@ -174,8 +189,17 @@ export function activate(context) {
         output.show(true);
         await vscode.window.showInformationMessage(`Chorus mode: ${controller.getMode()}`);
     }));
+    context.subscriptions.push(vscode.commands.registerCommand("chorus.openChatWindow", async () => {
+        await windows.openChat(true);
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("chorus.openAgentWindow", async () => {
+        await windows.openAgent(true);
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("chorus.openCollaborationWindows", async () => {
+        await windows.openBoth();
+    }));
     context.subscriptions.push(vscode.commands.registerCommand("chorus.openSession", async () => {
-        await vscode.commands.executeCommand("chorus.session.focus");
+        await vscode.commands.executeCommand("chorus.relay.focus");
     }));
 }
 export function deactivate() {

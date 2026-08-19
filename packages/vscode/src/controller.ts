@@ -41,6 +41,7 @@ export class ChorusController {
   private joinClient: JoinClient | null = null;
   private sessionId = `vscode-${Date.now().toString(36)}`;
   private pendingUsers: ConnectedUser[] = [];
+  private joinCommand: string | null = null;
   private readonly transcript: TranscriptLine[] = [];
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
@@ -62,6 +63,10 @@ export class ChorusController {
 
   getPendingUsers(): readonly ConnectedUser[] {
     return this.pendingUsers;
+  }
+
+  getJoinCommand(): string | null {
+    return this.joinCommand;
   }
 
   getJoinState(): JoinState | null {
@@ -233,6 +238,7 @@ export class ChorusController {
       this.relay.isExternal()
     );
     const joinCommand = `/chorus-join token="${token.token}" host="${joinHost}"`;
+    this.joinCommand = joinCommand;
     this.appendSystem(
       this.relay.isExternal()
         ? `Attached to external relay ${this.relay.getHost()}:${this.relay.getPort()}`
@@ -344,6 +350,7 @@ export class ChorusController {
   stop(): void {
     this.mode = "idle";
     this.pendingUsers = [];
+    this.joinCommand = null;
     this.relay?.stop();
     this.relay = null;
     this.appendSystem("Stopped sharing");

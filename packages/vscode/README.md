@@ -4,31 +4,29 @@ VS Code adapter for [Chorus](../../README.md) — share or join a live collabora
 
 ## What it does
 
-| Command | Behavior |
+| UI / command | Behavior |
 |---|---|
-| **Chorus: Share Session** | Spawns/attaches `chorus-relay`, issues a join token, copies `/chorus-join …` to the clipboard |
-| **Chorus: Join Session** | Connects to `/ws` with token + host |
-| **Chorus: Send Prompt to Host** | Joiner `collab.input` into the shared session |
-| **Chorus: Publish Host Message** | Host `session.event` fan-out to joiners |
-| **Chorus: Send Chat Message** | Side-channel chat (not LLM history) |
-| **Chorus: Leave / Stop / Status** | Disconnect / tear down / inspect state |
+| **Chorus** activity bar → **Relay** | Start/stop the relay, copy the join command, approve/deny joiners, join another host |
+| **Chorus: Open Chat Window** | Side-channel chat in its own window |
+| **Chorus: Open Agent Window** | Shared session / prompts in its own window; **Insert at cursor** into the host editor |
+| **Chorus: Share Session** | Same as Start relay; also opens chat + agent windows |
 
-The **Chorus** activity-bar panel shows the mirrored transcript and a compose box.
+The **host editor** stays in the original VS Code window. Chat and Agent are moved to separate windows so you can keep code in front.
 
 ## Access control
 
 Matches the OpenCode plugin defaults:
 
-- **Chorus: Share Session** sets `session.policy` with `requireApproval` (setting `chorus.requireApproval`, default `true`) and the workspace `origin` remote when present
-- Pending joiners trigger an Approve/Deny notification; commands **Chorus: Approve Joiner** / **Deny Joiner**
+- Start relay sets `session.policy` with `requireApproval` (setting `chorus.requireApproval`, default `true`) and the workspace `origin` remote when present
+- Pending joiners appear in the Relay panel (Approve / Deny)
 - Join requires a non-empty display name and sends the workspace git remote for same-repo gating
 - While `pending`, prompts/chat are blocked until the host approves
 
-## Honest scope (v1)
+## Honest scope
 
 - Speaks the same wire protocol as the OpenCode plugin (`@chorus/shared` + `@chorus/client`).
-- VS Code is **not** an OpenCode host: it does not drive OpenCode’s LLM loop. When you **share** from VS Code, collaborator prompts appear in the panel/notifications; publish host/AI lines manually (or pair with an OpenCode host that owns the model).
-- When you **join** an OpenCode-hosted session, prompts you send are real `collab.input` and the host transcript streams into the panel.
+- VS Code is **not** an OpenCode host: it does not drive OpenCode’s LLM loop. Collaborator prompts show in the Agent window; publish host/AI lines from that window, or pair with an OpenCode host that owns the model.
+- Joiners **cannot type in the host’s files**. They chat and send `collab.input`. The host applies work in their own editor (including Insert at cursor). Remote-control / Live Share-style editing is out of scope for this protocol.
 
 ## Prerequisites
 
@@ -44,9 +42,8 @@ Ensure `chorus-relay` is on `PATH`, or set `chorus.relayBin` / `CHORUS_RELAY_BIN
 ## Install (dev)
 
 1. Build this package: `bun run --filter chorus build`
-2. In VS Code: **Extensions: Install from Location…** → select `packages/vscode`  
-   (or use the [VS Code Extension Development Host](https://code.visualstudio.com/api/get-started/your-first-extension) with this folder as the extension root)
-3. Command Palette → **Chorus: Share Session** / **Join Session**
+2. Open an Extension Development Host with `packages/vscode`, or **Extensions: Install from Location…**
+3. Open the Chorus activity bar → **Start relay**, or Command Palette → **Chorus: Share Session**
 
 ## Settings
 
@@ -63,8 +60,10 @@ Env vars from the root README (`CHORUS_RELAY_HOST`, `CHORUS_HOST_TOKEN`, `CHORUS
 
 ```
 packages/vscode/
-  src/extension.ts      # activate + commands
-  src/controller.ts     # JoinClient + RelayServer orchestration
-  src/sessionView.ts    # sidebar webview
-  src/format.ts         # transcript line formatting
+  src/extension.ts               # activate + commands
+  src/controller.ts              # JoinClient + RelayServer orchestration
+  src/relayView.ts               # sidebar relay manager
+  src/collaborationWindows.ts    # chat + agent editor panels
+  src/ui.ts                      # shared webview HTML helpers
+  src/format.ts                  # transcript line formatting
 ```

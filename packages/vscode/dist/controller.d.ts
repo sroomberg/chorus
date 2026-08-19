@@ -21,6 +21,7 @@ export declare class ChorusController {
     private joinClient;
     private sessionId;
     private pendingUsers;
+    private joinCommand;
     private readonly transcript;
     private readonly _onDidChange;
     readonly onDidChange: vscode.Event<void>;
@@ -28,6 +29,7 @@ export declare class ChorusController {
     getMode(): ChorusMode;
     getTranscript(): readonly TranscriptLine[];
     getPendingUsers(): readonly ConnectedUser[];
+    getJoinCommand(): string | null;
     getJoinState(): JoinState | null;
     getShareSummary(): {
         sharing: boolean;
