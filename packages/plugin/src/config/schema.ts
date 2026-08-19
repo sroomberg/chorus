@@ -4,7 +4,7 @@ import { z } from "zod";
 export const chorusRoleSchema = z.enum(["edit", "view", "admin"]);
 
 const securityDefaults = {
-  requireApproval: true,
+  requireApproval: false,
   allowSkipApproval: true,
   requireRepoMatch: false,
   requireEmailDomainMatch: false,
