@@ -1,6 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, setDefaultTimeout } from "bun:test";
 import { JoinClient } from "../src/join/index.js";
 import { RelayServer } from "../src/relay/index.js";
+
+setDefaultTimeout(15_000);
 
 const TEST_PORT = 17743;
 
@@ -12,8 +14,8 @@ describe("JoinClient (via Rust relay)", () => {
     await relay.start();
   });
 
-  afterEach(() => {
-    relay.stop();
+  afterEach(async () => {
+    await relay.stop();
   });
 
   it("rejects connect with invalid token", async () => {

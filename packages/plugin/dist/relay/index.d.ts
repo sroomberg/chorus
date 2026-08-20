@@ -72,7 +72,8 @@ export declare class RelayServer {
     kickUser(userId: string): void;
     pushEvent(event: SessionEvent): void;
     sendChat(displayName: string | undefined, content: string): void;
-    stop(): void;
+    stop(): Promise<void>;
+    private waitUntilStopped;
     get isRunning(): boolean;
     get clientCount(): number;
     getPort(): number;
