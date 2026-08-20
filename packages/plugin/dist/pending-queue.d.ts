@@ -22,9 +22,9 @@ export type QueueResolveErr = {
     error: string;
 };
 export type QueueResolveResult = QueueResolveOk | QueueResolveErr;
-/** True when `id` is a queue slot (`1`, `02`, `A`) rather than a relay userId. */
+/** True when `id` is a queue slot (`1`, `02`) rather than a relay userId. */
 export declare function isQueueSlot(id: string): boolean;
-/** Normalize a typed slot to the canonical numeric ref (`A`/`01` → `"1"`). */
+/** Normalize a typed slot to the canonical numeric ref (`01` → `"1"`). */
 export declare function slotToRef(id: string): string | undefined;
 export declare function formatQueueLine(entry: QueueEntry): string;
 /** First line of every live queue board — used to detect control text. */
@@ -57,7 +57,7 @@ export declare class PendingQueue {
  * Resolve a chorus-approve / chorus-deny argument.
  *
  * - omitted / blank: the sole pending joiner, or an error if 0 or 2+
- * - `1` / `A`: queue slot
+ * - `1` / `2`: queue slot
  * - anything else: treated as a relay userId (pass-through even if not queued yet)
  */
 export declare function resolveQueueTarget(queue: PendingQueue, raw?: string): QueueResolveResult;

@@ -28,25 +28,19 @@ export type QueueResolveErr = {
 
 export type QueueResolveResult = QueueResolveOk | QueueResolveErr;
 
-const LETTER = /^[A-Za-z]$/;
 const DIGITS = /^\d+$/;
 
-/** True when `id` is a queue slot (`1`, `02`, `A`) rather than a relay userId. */
+/** True when `id` is a queue slot (`1`, `02`) rather than a relay userId. */
 export function isQueueSlot(id: string): boolean {
-  return DIGITS.test(id) || LETTER.test(id);
+  return DIGITS.test(id);
 }
 
-/** Normalize a typed slot to the canonical numeric ref (`A`/`01` → `"1"`). */
+/** Normalize a typed slot to the canonical numeric ref (`01` → `"1"`). */
 export function slotToRef(id: string): string | undefined {
-  if (DIGITS.test(id)) {
-    const n = Number.parseInt(id, 10);
-    if (!Number.isFinite(n) || n < 1) return undefined;
-    return String(n);
-  }
-  if (LETTER.test(id)) {
-    return String(id.toUpperCase().charCodeAt(0) - 64);
-  }
-  return undefined;
+  if (!DIGITS.test(id)) return undefined;
+  const n = Number.parseInt(id, 10);
+  if (!Number.isFinite(n) || n < 1) return undefined;
+  return String(n);
 }
 
 export function formatQueueLine(entry: QueueEntry): string {
@@ -62,7 +56,7 @@ export function formatPendingQueue(entries: QueueEntry[]): string {
   if (entries.length === 0) return `${JOIN_QUEUE_HEADER}\nNo pending joiners.`;
   const header = `Pending join queue (${entries.length}):`;
   const hint =
-    "Approve with /chorus-approve <id> or deny with /chorus-deny <id> — id is the number (or letter A=1) next to the joiner.";
+    "Approve with /chorus-approve <id> or deny with /chorus-deny <id> — id is the number next to the joiner.";
   return [JOIN_QUEUE_HEADER, header, ...entries.map(formatQueueLine), "", hint].join("\n");
 }
 
@@ -148,7 +142,7 @@ export class PendingQueue {
  * Resolve a chorus-approve / chorus-deny argument.
  *
  * - omitted / blank: the sole pending joiner, or an error if 0 or 2+
- * - `1` / `A`: queue slot
+ * - `1` / `2`: queue slot
  * - anything else: treated as a relay userId (pass-through even if not queued yet)
  */
 export function resolveQueueTarget(queue: PendingQueue, raw?: string): QueueResolveResult {

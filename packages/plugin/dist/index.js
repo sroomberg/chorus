@@ -109,7 +109,7 @@ export default async function chorusPlugin(input) {
     const USER_PAYLOAD_DEDUPE_MS = 2500;
     /** User message ids observed while sharing — used by the event-hook backup path. */
     const hostUserMessageIds = new Set();
-    /** Short ids (1, 2, A) for pending joiners so the host need not paste a userId. */
+    /** Numeric queue ids (1, 2, …) for pending joiners so the host need not paste a userId. */
     const pendingQueue = new PendingQueue();
     /** Keep the join-queue toast visible while anyone is still waiting. */
     let queueToastTimer = null;
@@ -554,7 +554,7 @@ export default async function chorusPlugin(input) {
                         config.org.name ? `Org: ${config.org.name}.` : null,
                         config.org.policyNote ?? null,
                         requireApproval
-                            ? "Joiners wait for your approval. The pending queue updates live on screen; /chorus-approve 1 (or A)."
+                            ? "Joiners wait for your approval. The pending queue updates live on screen; /chorus-approve 1."
                             : "Open join: token holders connect without approval.",
                         !config.security.allowSkipApproval
                             ? "Approval policy is locked by config (allowSkipApproval=false)."
@@ -698,13 +698,13 @@ export default async function chorusPlugin(input) {
             },
             "chorus-approve": {
                 description: "Approve a pending joiner so they can enter the shared session. " +
-                    "Pass the queue number printed next to the joiner (1, 2, …) or letter A=1. " +
+                    "Pass the queue number printed next to the joiner (1, 2, …). " +
                     "Full userId still works. Omit the id when only one joiner is waiting.",
                 args: {
                     userId: z
                         .string()
                         .optional()
-                        .describe("Queue slot from the pending join list (1, 2, or A) or the full userId. " +
+                        .describe("Queue number from the pending join list (1, 2, …) or the full userId. " +
                         "Omit to approve the only pending joiner."),
                 },
                 async execute(args, context) {
@@ -735,13 +735,13 @@ export default async function chorusPlugin(input) {
             },
             "chorus-deny": {
                 description: "Deny a pending joiner and disconnect them from the relay. " +
-                    "Pass the queue number printed next to the joiner (1, 2, …) or letter A=1. " +
+                    "Pass the queue number printed next to the joiner (1, 2, …). " +
                     "Full userId still works. Omit the id when only one joiner is waiting.",
                 args: {
                     userId: z
                         .string()
                         .optional()
-                        .describe("Queue slot from the pending join list (1, 2, or A) or the full userId. " +
+                        .describe("Queue number from the pending join list (1, 2, …) or the full userId. " +
                         "Omit to deny the only pending joiner."),
                 },
                 async execute(args, context) {
@@ -824,7 +824,7 @@ export default async function chorusPlugin(input) {
             },
             "chorus-status": {
                 description: "Show the current chorus state: whether sharing, joined, who is connected, " +
-                    "the pending join queue (short ids for approve/deny), and effective config.",
+                    "the pending join queue (numbers for approve/deny), and effective config.",
                 args: {},
                 async execute(_args, context) {
                     const loaded = getConfig(context.directory);
