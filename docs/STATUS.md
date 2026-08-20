@@ -33,11 +33,18 @@ Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`
 
 ### P1 — remote use & security
 
+Enterprise gap analysis (what would actually pass a security review vs what ships today): [docs/ENTERPRISE.md](./ENTERPRISE.md).
+
 8. Implement `tunnel/` (`bore` / `cloudflared`) or explicitly market LAN-only.
 9. Default token TTL; revoke tokens on `chorus-stop`.
 10. TLS / auth hardening for off-LAN; protocol decode is bare `JSON.parse`.
 11. Stronger repo ACL (GitHub/GitLab API or signed capability) — current gate is same-remote claim only.
 12. Host moderation UI polish (pending queue in `chorus-status`, bulk approve).
+13. **Org policy floor** — system config must not be weakenable by user/project `chorus.json` (`allowSkipApproval`, domain, default role, TTL).
+14. **Safer default role** (`view`) and joiner tool allowlist — `edit` inherits the host agent’s files/shell/MCP.
+15. **Audit log** (share/join/approve/kick/collab.input) exportable to SIEM.
+16. **SSO/OIDC** — replace self-asserted `email` on the auth frame.
+17. **Backup data handling** — KMS, retention, no-backup org lock, redact secrets/tokens.
 
 ### Security shipped (this pass)
 
@@ -45,21 +52,23 @@ Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`
 - Required display name on join (no anonymous / empty names)
 - Git origin binding when the host share directory has a remote (joiner must present matching remote)
 - `chorus-kick` for active joiners
-- Layered `chorus.json` config (org/user/project) for security + relay + backup defaults, with enterprise locks
+- Layered `chorus.json` config (org/user/project) for security + relay + backup defaults, with enterprise locks (user/project can still override system; email/repo remain claims — [docs/ENTERPRISE.md](./ENTERPRISE.md))
 
 ### P1 — reliability
 
-13. Serialize collab input injection (current “queue” can race).
-14. JoinClient reconnect + connect timeout.
-15. Replay chat history on join (events only today).
-16. Refresh installed slash commands on plugin upgrade (today: skip if dest exists).
+18. Serialize collab input injection (current “queue” can race).
+19. JoinClient reconnect + connect timeout.
+20. Replay chat history on join (events only today).
+21. Refresh installed slash commands on plugin upgrade (today: skip if dest exists).
 
 ### P2 — backup & polish
 
-17. Backup AI + chat events; expose restore/list; set `endedAt` on stop.
-18. Drop unused `@aws-sdk/lib-storage` or use it.
-19. Broader tests: roles/view-forbid, kick/close, chat/typing, plugin entry, tunnel.
-20. Native slash-command registration when [opencode#5305](https://github.com/sst/opencode/issues/5305) lands.
+### P2 — backup & polish
+
+22. Backup AI + chat events; expose restore/list; set `endedAt` on stop.
+23. Drop unused `@aws-sdk/lib-storage` or use it.
+24. Broader tests: roles/view-forbid, kick/close, chat/typing, plugin entry, tunnel.
+25. Native slash-command registration when [opencode#5305](https://github.com/sst/opencode/issues/5305) lands.
 
 ## Local multi-agent harness
 
