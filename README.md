@@ -181,7 +181,7 @@ These knobs are pairing controls, not a complete enterprise ACL: email and git r
 |---|---|
 | Join token | Still required; issued by `/chorus-share` with a role |
 | Display name | **Required** on `/chorus-join` — empty names are rejected |
-| Host approval | Config `security.requireApproval` (default off); when on, joiner stays pending until `/chorus-approve` |
+| Host approval | Config `security.requireApproval` (default off); when on, joiners appear in a numbered queue — `/chorus-approve 1` (full userId still works) |
 | Git repo gate | If the host share directory has `origin` (or `requireRepoMatch`), joiners must present the same remote. Extra prefixes/rewrites come from `additionalRepoRemotePrefixes` / `repoRemoteRewrites`. |
 | Company email gate | If `allowedEmailDomain` is set (or `requireEmailDomainMatch`), joiners must auth with an email at that domain |
 | Kick | `/chorus-kick <userId>` disconnects an active joiner |
