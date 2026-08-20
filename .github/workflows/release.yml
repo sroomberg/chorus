@@ -21,7 +21,12 @@ jobs:
       - name: Extract release notes and publish
         run: |
           VERSION="${{ github.ref_name }}"
-          awk "p && /^## v/{exit} /^## ${VERSION}/{p=1}" CHANGELOG.md > /tmp/release-notes.md
+          # Trailing `p` prints lines after the matching ## heading until the next ## v* section.
+          awk "p && /^## v/{exit} /^## ${VERSION}/{p=1} p" CHANGELOG.md > /tmp/release-notes.md
+          if [ ! -s /tmp/release-notes.md ]; then
+            echo "No CHANGELOG section found for ${VERSION}" >&2
+            exit 1
+          fi
           gh release create "$VERSION" \
             --title "$VERSION" \
             --notes-file /tmp/release-notes.md
