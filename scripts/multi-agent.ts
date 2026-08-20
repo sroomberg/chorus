@@ -551,7 +551,7 @@ async function cmdRelayStress(args: Args): Promise<void> {
   }
 
   for (const c of clients) c.disconnect();
-  relay.stop();
+  await relay.stop();
 
   if (received.length !== n) {
     console.error(`✗ expected ${n} inputs, got ${received.length}:`, received);
