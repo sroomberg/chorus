@@ -2,21 +2,81 @@
 
 ## Unreleased
 
-- Host: pending joiners print as a live numbered queue (`1`, `2`, …) that updates as people arrive, leave, or are admitted. `/chorus-approve 1` / `/chorus-deny 1` replace pasting a full userId; omit the id when only one joiner is waiting. `/chorus-status` lists the queue.
-- Docs: enterprise security gap analysis (`docs/ENTERPRISE.md`) — org policy floor, SSO, safer default role, TLS/token hygiene, audit, backup handling
-- Config file support (`chorus.json` / `.chorus/config.json` / `~/.config/chorus/config.json` / `/etc/chorus/config.json`) with layered merge, enterprise security locks (`allowSkipApproval`, `requireRepoMatch`), and `/chorus-status` effective-config output
-- Security: host approval gate for joiners (`requireApproval` on share, default false; `chorus-approve` / `chorus-deny`)
-- Security: display name required on join (reject empty / whitespace)
-- Security: when the host share directory has a git `origin`, bind the session to that remote and reject joiners who are not in a matching clone (soft claim check, not provider ACL)
-- Host tool: `chorus-kick` for active joiners
-- `/chorus-share` join command includes `name="YOUR_NAME"` and optional `[email="<work-email>"]` for the collaborator to fill in
-- Real-time shared transcript for all agents: fan out collaborator prompts to every joiner, abort joiner local LLM, mirror `[Host]`/`[name]`/`[AI]` (prefer web UI for live view)
-- Joiner mirrors host prompts and AI replies into its OpenCode session transcript (`[Host]:` / `[AI]:`), including history replay on join (replaces toast-only viewing)
-- Fix: prevent host/joiner feedback loop when the same agent both shares and joins (block join while sharing; never mirror while hosting; drop echoed `[AI]/`/`[Host]:` collab lines)
-- Replace in-process Bun WebSocket relay with Rust `chorus-relay` binary (`crates/chorus-relay`)
-- Host control protocol on `/host` (token issue, session events, chat, collab.input fan-in)
-- Joiner protocol on `/ws` unchanged
-- Plugin spawns/manages the relay subprocess (`CHORUS_RELAY_BIN` override)
+## v1.0.0 — 2026-08-20
+
+First stable release of Chorus: **OpenCode↔OpenCode pair programming on one live AI session**. The host shares a session; collaborators join over a LAN WebSocket relay and send prompts into the same LLM turn. Side-channel chat stays in toasts; the shared transcript is mirrored into each joiner’s OpenCode session.
+
+GitHub tag `v1.0.0` is the source of truth for this release. `@chorus/plugin` is still install-from-git (packages are private; npm publish is not in this release).
+
+### Install
+
+Both sides need [OpenCode](https://opencode.ai) and this plugin. The **host** also needs the `chorus-relay` binary.
+
+```sh
+git clone https://github.com/sroomberg/chorus.git
+cd chorus
+cargo build -p chorus-relay --release
+
+mkdir -p .opencode/plugin
+bun add --cwd .opencode/plugin /path/to/chorus/packages/plugin
+```
+
+OpenCode config:
+
+```json
+{
+  "plugin": ["@chorus/plugin"]
+}
+```
+
+Put `target/release/chorus-relay` on `PATH`, or set `CHORUS_RELAY_BIN`. Default relay port is `7742` (`CHORUS_PORT`). Remote tunneling (`bore` / `cloudflared`) is not in this release — share a LAN IP + port.
+
+### Use
+
+1. Host: `/chorus-share` (optional role `edit` | `view` | `admin`; optional `requireApproval=true`)
+2. Send the printed `/chorus-join` command to the collaborator. Fill in `name="YOUR_NAME"` (required). Include `email="you@company.com"` when the host enforces a company domain.
+3. Joiner: run that `/chorus-join`. If approval is on, the host sees a live numbered queue — `/chorus-approve 1` / `/chorus-deny 1` (or omit the id when only one joiner is waiting; full userId still works).
+4. Joiner prompts go to the **host** session (local joiner LLM is aborted). Everyone should see `[Host]:` / `[name]:` / `[AI]:` in the transcript.
+5. `/chorus-chat` is a toast-only side channel. `/chorus-status` shows connected users, the pending queue, and effective config. `/chorus-leave` / `/chorus-stop` end join / sharing. `/chorus-kick <userId>` disconnects a joiner.
+
+Prefer the **OpenCode web UI** for live mirrored lines. `opencode attach` often does not live-render plugin-injected transcript.
+
+### Highlights since v0.1.6
+
+- **Rust relay** — in-process Bun WebSocket server replaced by `crates/chorus-relay`. Plugin spawns/manages it (`CHORUS_RELAY_BIN` override). Host control plane on `/host` (token issue, session events, chat, `collab.input`); joiner protocol on `/ws` is unchanged.
+- **Shared transcript** — collaborator prompts fan out to every joiner; joiners inject `[Host]:` / `[AI]:` (including history replay on join). Toast-only viewing is no longer the primary UX.
+- **Loop guard** — an agent cannot share and join at once; hosts never mirror; echoed `[AI]:` / `[Host]:` collab lines are dropped.
+- **Layered config** — `chorus.json` / `.chorus/config.json` / `~/.config/chorus/config.json` / `/etc/chorus/config.json` (plus `CHORUS_CONFIG`). Later layers win. `/chorus-status` prints effective config and which files contributed. Copy `chorus.example.json`.
+- **Session access control**
+  - Join token still required; role baked in at `/chorus-share`
+  - Display name required (empty / whitespace rejected)
+  - Optional host approval (`security.requireApproval`, default off) with a live numbered pending queue (`/chorus-approve 1` / `/chorus-deny 1`)
+  - Git origin binding: if the host share directory has `origin` (or `requireRepoMatch`), joiners must present the same remote (claim check, not GitHub/GitLab ACL). Extra prefixes/rewrites: `additionalRepoRemotePrefixes` / `repoRemoteRewrites`
+  - Optional company email gate (`allowedEmailDomain` / `requireEmailDomainMatch`)
+  - `/chorus-kick` for active joiners
+  - Enterprise locks: `allowSkipApproval=false` prevents turning approval off from tool args
+- **Share command** — printed join line includes `name="YOUR_NAME"` and optional `[email="<work-email>"]`
+- **Enterprise docs** — `docs/ENTERPRISE.md` covers security gaps (claims vs proofs, org policy floor, SSO, TLS/token hygiene, audit)
+
+### Breaking changes
+
+- Hosts must run `chorus-relay`; the embedded Bun relay is gone.
+- `/chorus-join` requires a real display name (`YOUR_NAME` placeholder is not accepted).
+- Joiners now receive transcript lines in session history, not only toasts.
+
+### Config & env (short)
+
+| Control | Default | Notes |
+|---|---|---|
+| `security.requireApproval` | `false` | Pending numbered queue until `/chorus-approve` |
+| `security.allowSkipApproval` | `true` | If `false`, share cannot disable approval |
+| `security.requireRepoMatch` | `false` | Share fails without git `origin` when true |
+| `security.allowedEmailDomain` | — | Joiners must use that email domain |
+| `relay.port` / `CHORUS_PORT` | `7742` | Listen port |
+| `CHORUS_PUBLIC_HOST` | local IP:port | Host:port in join URLs |
+| `CHORUS_AWS_BUCKET` | — | Optional S3/R2 session backup |
+
+Full tables: [README](https://github.com/sroomberg/chorus/blob/main/README.md). Status and backlog: [docs/STATUS.md](https://github.com/sroomberg/chorus/blob/main/docs/STATUS.md). Enterprise gaps: [docs/ENTERPRISE.md](https://github.com/sroomberg/chorus/blob/main/docs/ENTERPRISE.md).
 
 ## v0.1.6 — 2026-05-27
 
