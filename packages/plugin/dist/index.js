@@ -6,6 +6,7 @@ import { detectRepoRemote } from "./git.js";
 import { loadChorusConfig, resolveDefaultRole, resolveRequireApproval, resolveAllowedEmailDomain, } from "./config/index.js";
 import { normalizeDisplayName, normalizeEmail } from "@chorus/shared";
 import { MIRROR_LINE, formatMirroredEvent, isChorusControlText, shouldFanOutHostUserText, shouldForwardJoinerInput, shouldPublishAssistantText, userTextFromParts, } from "./transcript.js";
+import { PendingQueue, formatPendingQueue, resolveQueueTarget, } from "./pending-queue.js";
 import { networkInterfaces } from "node:os";
 import { mkdirSync, existsSync, copyFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -108,6 +109,8 @@ export default async function chorusPlugin(input) {
     const USER_PAYLOAD_DEDUPE_MS = 2500;
     /** User message ids observed while sharing — used by the event-hook backup path. */
     const hostUserMessageIds = new Set();
+    /** Short ids (1, 2, A) for pending joiners so the host need not paste a userId. */
+    const pendingQueue = new PendingQueue();
     function toast(message, variant = "info", duration = 4000) {
         input.client.tui.showToast({ body: { message, variant, duration } }).catch(() => { });
     }
@@ -119,6 +122,50 @@ export default async function chorusPlugin(input) {
             body: { noReply: true, parts: [{ type: "text", text }] },
         })
             .catch(() => { });
+    }
+    function pendingQueuePayload() {
+        return {
+            pendingQueue: pendingQueue.snapshot(),
+            pendingQueueText: formatPendingQueue(pendingQueue.list()),
+        };
+    }
+    function announcePendingQueue(prefix, toastMessage) {
+        const body = [prefix, formatPendingQueue(pendingQueue.list())].filter(Boolean).join("\n");
+        const first = pendingQueue.list()[0];
+        const toastHint = toastMessage ??
+            (first
+                ? `Join queue [${first.ref}] ${first.user.displayName}. /chorus-approve ${first.ref}`
+                : "No pending joiners.");
+        toast(toastHint, pendingQueue.size ? "warning" : "info", pendingQueue.size ? 12_000 : 4000);
+        if (sessionId)
+            say(sessionId, body);
+    }
+    function admitPending(action, raw) {
+        const resolved = resolveQueueTarget(pendingQueue, raw);
+        if (!resolved.ok) {
+            if (sessionId)
+                say(sessionId, resolved.error);
+            return { ok: false, error: resolved.error, ...pendingQueuePayload() };
+        }
+        if (action === "approve")
+            relay.approveUser(resolved.userId);
+        else
+            relay.denyUser(resolved.userId);
+        const entry = pendingQueue.remove(resolved.userId);
+        const name = entry?.user.displayName ?? resolved.displayName ?? resolved.userId;
+        const ref = resolved.ref ?? entry?.ref;
+        const verb = action === "approve" ? "Approved" : "Denied";
+        if (sessionId) {
+            say(sessionId, `${verb} [${ref ?? "id"}] ${name}.\n${formatPendingQueue(pendingQueue.list())}`);
+        }
+        toast(`${verb} ${name}`, action === "approve" ? "success" : "info", 4000);
+        return {
+            ok: true,
+            id: ref,
+            userId: resolved.userId,
+            displayName: name,
+            ...pendingQueuePayload(),
+        };
     }
     function rememberSet(set, value, max = 400) {
         if (set.has(value))
@@ -261,18 +308,22 @@ export default async function chorusPlugin(input) {
         toast(`[${displayName ?? "someone"}] is typing…`, "info", 2000);
     });
     relay.setUserPendingHandler((user) => {
-        const emailNote = user.email ? ` email=${user.email}` : "";
-        toast(`Join request from ${user.displayName} (${user.role}).${emailNote} Run chorus-approve userId="${user.userId}" or chorus-deny.`, "warning", 12_000);
-        if (sessionId) {
-            say(sessionId, `Pending join: ${user.displayName}${user.email ? ` <${user.email}>` : ""} wants ${user.role} access (userId=${user.userId}). ` +
-                `Approve with /chorus-approve ${user.userId} or deny with /chorus-deny ${user.userId}.`);
-        }
+        const entry = pendingQueue.enqueue(user);
+        const email = user.email ? ` <${user.email}>` : "";
+        announcePendingQueue(`New join request [${entry.ref}] ${user.displayName}${email} wants ${user.role} access.`, `Join request [${entry.ref}] ${user.displayName} (${user.role}). /chorus-approve ${entry.ref}`);
     });
     relay.setUserJoinedHandler((user) => {
+        pendingQueue.remove(user.userId);
         toast(`${user.displayName} joined (${user.role})`, "success", 4000);
     });
     relay.setUserLeftHandler((userId) => {
-        toast(`User left (${userId.slice(0, 8)}…)`, "info", 3000);
+        const removed = pendingQueue.remove(userId);
+        if (removed) {
+            announcePendingQueue(`${removed.user.displayName} left before approval.`);
+        }
+        else {
+            toast(`User left (${userId.slice(0, 8)}…)`, "info", 3000);
+        }
     });
     return {
         /**
@@ -396,6 +447,7 @@ export default async function chorusPlugin(input) {
                         mirroredEventIds.clear();
                     }
                     if (!sharing) {
+                        pendingQueue.clear();
                         await relay.start();
                         sharing = true;
                         const where = relay.isExternal()
@@ -446,7 +498,7 @@ export default async function chorusPlugin(input) {
                         config.org.name ? `Org: ${config.org.name}.` : null,
                         config.org.policyNote ?? null,
                         requireApproval
-                            ? "Joiners wait for your approval (chorus-approve / chorus-deny)."
+                            ? "Joiners wait for your approval. Pending requests appear as a numbered queue; /chorus-approve 1 (or A)."
                             : "Open join: token holders connect without approval.",
                         !config.security.allowSkipApproval
                             ? "Approval policy is locked by config (allowSkipApproval=false)."
@@ -590,9 +642,14 @@ export default async function chorusPlugin(input) {
             },
             "chorus-approve": {
                 description: "Approve a pending joiner so they can enter the shared session. " +
-                    "Use the userId from the join-request toast or chorus-status.",
+                    "Pass the queue number printed next to the joiner (1, 2, …) or letter A=1. " +
+                    "Full userId still works. Omit the id when only one joiner is waiting.",
                 args: {
-                    userId: z.string().describe("Pending user id to approve."),
+                    userId: z
+                        .string()
+                        .optional()
+                        .describe("Queue slot from the pending join list (1, 2, or A) or the full userId. " +
+                        "Omit to approve the only pending joiner."),
                 },
                 async execute(args) {
                     if (!sharing) {
@@ -601,14 +658,34 @@ export default async function chorusPlugin(input) {
                             error: "Not currently sharing a session.",
                         });
                     }
-                    relay.approveUser(args.userId);
-                    return JSON.stringify({ approved: true, userId: args.userId });
+                    const result = admitPending("approve", args.userId);
+                    return JSON.stringify(result.ok
+                        ? {
+                            approved: true,
+                            id: result.id,
+                            userId: result.userId,
+                            displayName: result.displayName,
+                            pendingQueue: result.pendingQueue,
+                            pendingQueueText: result.pendingQueueText,
+                        }
+                        : {
+                            approved: false,
+                            error: result.error,
+                            pendingQueue: result.pendingQueue,
+                            pendingQueueText: result.pendingQueueText,
+                        });
                 },
             },
             "chorus-deny": {
-                description: "Deny a pending joiner and disconnect them from the relay.",
+                description: "Deny a pending joiner and disconnect them from the relay. " +
+                    "Pass the queue number printed next to the joiner (1, 2, …) or letter A=1. " +
+                    "Full userId still works. Omit the id when only one joiner is waiting.",
                 args: {
-                    userId: z.string().describe("Pending user id to deny."),
+                    userId: z
+                        .string()
+                        .optional()
+                        .describe("Queue slot from the pending join list (1, 2, or A) or the full userId. " +
+                        "Omit to deny the only pending joiner."),
                 },
                 async execute(args) {
                     if (!sharing) {
@@ -617,8 +694,22 @@ export default async function chorusPlugin(input) {
                             error: "Not currently sharing a session.",
                         });
                     }
-                    relay.denyUser(args.userId);
-                    return JSON.stringify({ denied: true, userId: args.userId });
+                    const result = admitPending("deny", args.userId);
+                    return JSON.stringify(result.ok
+                        ? {
+                            denied: true,
+                            id: result.id,
+                            userId: result.userId,
+                            displayName: result.displayName,
+                            pendingQueue: result.pendingQueue,
+                            pendingQueueText: result.pendingQueueText,
+                        }
+                        : {
+                            denied: false,
+                            error: result.error,
+                            pendingQueue: result.pendingQueue,
+                            pendingQueueText: result.pendingQueueText,
+                        });
                 },
             },
             "chorus-kick": {
@@ -674,7 +765,8 @@ export default async function chorusPlugin(input) {
                 },
             },
             "chorus-status": {
-                description: "Show the current chorus state: whether sharing, joined, who is connected, and effective config.",
+                description: "Show the current chorus state: whether sharing, joined, who is connected, " +
+                    "the pending join queue (short ids for approve/deny), and effective config.",
                 args: {},
                 async execute(_args, context) {
                     const loaded = getConfig(context.directory);
@@ -686,6 +778,7 @@ export default async function chorusPlugin(input) {
                             port: relay.getPort(),
                             host: relay.getHost(),
                             external: relay.isExternal(),
+                            ...pendingQueuePayload(),
                         }
                         : { sharing: false };
                     const joinInfo = joinClient
@@ -712,6 +805,7 @@ export default async function chorusPlugin(input) {
                 args: {},
                 async execute() {
                     sharing = false;
+                    pendingQueue.clear();
                     relay.stop();
                     return JSON.stringify({ stopped: true });
                 },
@@ -722,6 +816,7 @@ export default async function chorusPlugin(input) {
             joinClient = null;
             joinSessionId = "";
             mirroredEventIds.clear();
+            pendingQueue.clear();
             relay.stop();
         },
     };

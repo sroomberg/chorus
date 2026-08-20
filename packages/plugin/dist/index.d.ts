@@ -139,19 +139,19 @@ export default function chorusPlugin(input: PluginInput): Promise<{
         "chorus-approve": {
             description: string;
             args: {
-                userId: z.ZodString;
+                userId: z.ZodOptional<z.ZodString>;
             };
             execute(args: {
-                userId: string;
+                userId?: string;
             }): Promise<string>;
         };
         "chorus-deny": {
             description: string;
             args: {
-                userId: z.ZodString;
+                userId: z.ZodOptional<z.ZodString>;
             };
             execute(args: {
-                userId: string;
+                userId?: string;
             }): Promise<string>;
         };
         "chorus-kick": {
