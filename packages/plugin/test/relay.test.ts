@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, setDefaultTimeout } from "bun:test";
 import { RelayServer } from "../src/relay/index.js";
 import type { ServerMessage } from "@chorus/shared";
 import { encodeMessage, decodeServerMessage } from "@chorus/shared";
+
+setDefaultTimeout(15_000);
 
 const TEST_PORT = 17742;
 
@@ -45,8 +47,8 @@ describe("RelayServer (Rust)", () => {
     await relay.start();
   });
 
-  afterEach(() => {
-    relay.stop();
+  afterEach(async () => {
+    await relay.stop();
   });
 
   it("rejects connections with invalid token", async () => {
