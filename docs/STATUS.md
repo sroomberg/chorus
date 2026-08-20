@@ -39,7 +39,7 @@ Enterprise gap analysis (what would actually pass a security review vs what ship
 9. Default token TTL; revoke tokens on `chorus-stop`.
 10. TLS / auth hardening for off-LAN; protocol decode is bare `JSON.parse`.
 11. Stronger repo ACL (GitHub/GitLab API or signed capability) — current gate is same-remote claim only.
-12. Host moderation UI polish: pending join queue with short ids is in `chorus-approve` / `chorus-deny` / `chorus-status`. Bulk approve still open.
+12. Host moderation UI polish: live pending join queue with short ids is in `chorus-approve` / `chorus-deny` / `chorus-status`. Bulk approve still open.
 13. **Org policy floor** — system config must not be weakenable by user/project `chorus.json` (`allowSkipApproval`, domain, default role, TTL).
 14. **Safer default role** (`view`) and joiner tool allowlist — `edit` inherits the host agent’s files/shell/MCP.
 15. **Audit log** (share/join/approve/kick/collab.input) exportable to SIEM.

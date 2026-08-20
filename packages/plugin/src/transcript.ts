@@ -10,6 +10,9 @@ export const LABELED_LINE = /^\[[^\]]+\]:\s/;
 const CHORUS_SLASH = /\/chorus-(?:share|join|leave|stop|status|chat|approve|deny|kick)\b/i;
 const JOIN_NAMED_ARGS = /\btoken="[^"]+"\s+host="/;
 const HOSTING_LOOP_ERROR = /currently hosting the session/i;
+/** Live pending-join board injected into the host session. */
+const JOIN_QUEUE_BOARD =
+  /^(?:Chorus join queue|New join request \[|Approved \[|Denied \[)/m;
 
 export type TextPartLike = {
   type: string;
@@ -30,7 +33,9 @@ export function userTextFromParts(parts: TextPartLike[] | undefined): string {
 export function isChorusControlText(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
-  return CHORUS_SLASH.test(trimmed) || JOIN_NAMED_ARGS.test(trimmed);
+  return (
+    CHORUS_SLASH.test(trimmed) || JOIN_NAMED_ARGS.test(trimmed) || JOIN_QUEUE_BOARD.test(trimmed)
+  );
 }
 
 /**

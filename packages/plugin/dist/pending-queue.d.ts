@@ -27,8 +27,12 @@ export declare function isQueueSlot(id: string): boolean;
 /** Normalize a typed slot to the canonical numeric ref (`A`/`01` → `"1"`). */
 export declare function slotToRef(id: string): string | undefined;
 export declare function formatQueueLine(entry: QueueEntry): string;
+/** First line of every live queue board — used to detect control text. */
+export declare const JOIN_QUEUE_HEADER = "Chorus join queue";
 /** Screen listing of pending joiners with short ids for approve/deny. */
 export declare function formatPendingQueue(entries: QueueEntry[]): string;
+/** Compact multi-line toast so the host can watch the queue change. */
+export declare function formatPendingQueueToast(entries: QueueEntry[]): string;
 /**
  * Host-side pending-join queue. Assigns stable short refs so the host can
  * approve/deny without pasting the relay userId.

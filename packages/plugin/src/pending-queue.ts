@@ -54,13 +54,26 @@ export function formatQueueLine(entry: QueueEntry): string {
   return `  ${entry.ref}  ${entry.user.displayName}${email}  ${entry.user.role}`;
 }
 
+/** First line of every live queue board — used to detect control text. */
+export const JOIN_QUEUE_HEADER = "Chorus join queue";
+
 /** Screen listing of pending joiners with short ids for approve/deny. */
 export function formatPendingQueue(entries: QueueEntry[]): string {
-  if (entries.length === 0) return "No pending joiners.";
+  if (entries.length === 0) return `${JOIN_QUEUE_HEADER}\nNo pending joiners.`;
   const header = `Pending join queue (${entries.length}):`;
   const hint =
     "Approve with /chorus-approve <id> or deny with /chorus-deny <id> — id is the number (or letter A=1) next to the joiner.";
-  return [header, ...entries.map(formatQueueLine), "", hint].join("\n");
+  return [JOIN_QUEUE_HEADER, header, ...entries.map(formatQueueLine), "", hint].join("\n");
+}
+
+/** Compact multi-line toast so the host can watch the queue change. */
+export function formatPendingQueueToast(entries: QueueEntry[]): string {
+  if (entries.length === 0) return "No pending joiners.";
+  const lines = entries.map((entry) => {
+    const email = entry.user.email ? ` <${entry.user.email}>` : "";
+    return `${entry.ref}  ${entry.user.displayName}${email}  ${entry.user.role}`;
+  });
+  return [`Pending join queue (${entries.length}) — /chorus-approve <id>`, ...lines].join("\n");
 }
 
 /**

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Host: pending joiners print as a numbered queue (`1`, `2`, …; letter `A` = 1). `/chorus-approve 1` / `/chorus-deny 1` replace pasting a full userId; omit the id when only one joiner is waiting. `/chorus-status` lists the queue.
+- Host: pending joiners print as a live numbered queue (`1`, `2`, …; letter `A` = 1) that updates as people arrive, leave, or are admitted. `/chorus-approve 1` / `/chorus-deny 1` replace pasting a full userId; omit the id when only one joiner is waiting. `/chorus-status` lists the queue.
 - Docs: enterprise security gap analysis (`docs/ENTERPRISE.md`) — org policy floor, SSO, safer default role, TLS/token hygiene, audit, backup handling
 - Config file support (`chorus.json` / `.chorus/config.json` / `~/.config/chorus/config.json` / `/etc/chorus/config.json`) with layered merge, enterprise security locks (`allowSkipApproval`, `requireRepoMatch`), and `/chorus-status` effective-config output
 - Security: host approval gate for joiners (`requireApproval` on share, default false; `chorus-approve` / `chorus-deny`)

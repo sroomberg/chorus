@@ -61,6 +61,17 @@ describe("shouldFanOutHostUserText", () => {
     ).toBe(false);
     expect(shouldFanOutHostUserText('token="abc12345" host="h:7742"')).toBe(false);
   });
+
+  it("skips the live pending-join queue board", () => {
+    expect(
+      shouldFanOutHostUserText(
+        "Chorus join queue\nPending join queue (1):\n  1  Alice  edit"
+      )
+    ).toBe(false);
+    expect(shouldFanOutHostUserText("New join request [1] Alice wants edit access.")).toBe(
+      false
+    );
+  });
 });
 
 describe("shouldForwardJoinerInput", () => {

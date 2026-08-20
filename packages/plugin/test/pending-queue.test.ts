@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { ConnectedUser } from "@chorus/shared";
 import {
+  JOIN_QUEUE_HEADER,
   PendingQueue,
   formatPendingQueue,
+  formatPendingQueueToast,
   isQueueSlot,
   resolveQueueTarget,
   slotToRef,
@@ -106,6 +108,7 @@ describe("formatPendingQueue", () => {
     q.enqueue(user("u1", "Alice", { email: "alice@acme.com" }));
     q.enqueue(user("u2", "Bob", { role: "view" }));
     const text = formatPendingQueue(q.list());
+    expect(text.startsWith(JOIN_QUEUE_HEADER)).toBe(true);
     expect(text).toContain("Pending join queue (2):");
     expect(text).toContain("  1  Alice <alice@acme.com>  edit");
     expect(text).toContain("  2  Bob  view");
@@ -114,7 +117,17 @@ describe("formatPendingQueue", () => {
   });
 
   it("says when the queue is empty", () => {
-    expect(formatPendingQueue([])).toBe("No pending joiners.");
+    expect(formatPendingQueue([])).toBe(`${JOIN_QUEUE_HEADER}\nNo pending joiners.`);
+  });
+
+  it("formats a compact live toast listing every waiting joiner", () => {
+    const q = new PendingQueue();
+    q.enqueue(user("u1", "Alice", { email: "alice@acme.com" }));
+    q.enqueue(user("u2", "Bob", { role: "view" }));
+    expect(formatPendingQueueToast(q.list())).toBe(
+      "Pending join queue (2) — /chorus-approve <id>\n1  Alice <alice@acme.com>  edit\n2  Bob  view"
+    );
+    expect(formatPendingQueueToast([])).toBe("No pending joiners.");
   });
 });
 
