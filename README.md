@@ -139,6 +139,8 @@ Copy [chorus.example.json](./chorus.example.json) to get started. Example enterp
 }
 ```
 
+These knobs are pairing controls, not a complete enterprise ACL: email and git remote are **self-asserted** on join, and later config layers (user/project) can still override `/etc/chorus/config.json`. See [docs/ENTERPRISE.md](docs/ENTERPRISE.md) for the gaps a security review will hit.
+
 | Field | Default | Description |
 |---|---|---|
 | `security.requireApproval` | `false` | Joiners pending until host approve/deny |
@@ -190,6 +192,7 @@ Remote tunneling (`bore` / `cloudflared`) is not implemented yet — share a LAN
 
 - [docs/STATUS.md](docs/STATUS.md) — what’s done and what still needs to happen
 - [docs/DECISIONS.md](docs/DECISIONS.md) — OpenCode plugin vs from-scratch, languages, license
+- [docs/ENTERPRISE.md](docs/ENTERPRISE.md) — security gaps for enterprise use (claims vs proofs, policy floor, SSO, audit)
 - [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md) — third-party license audit for commercial use
 
 ## License

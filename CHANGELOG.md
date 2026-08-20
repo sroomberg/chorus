@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Docs: enterprise security gap analysis (`docs/ENTERPRISE.md`) — org policy floor, SSO, safer default role, TLS/token hygiene, audit, backup handling
 - Config file support (`chorus.json` / `.chorus/config.json` / `~/.config/chorus/config.json` / `/etc/chorus/config.json`) with layered merge, enterprise security locks (`allowSkipApproval`, `requireRepoMatch`), and `/chorus-status` effective-config output
 - Security: host approval gate for joiners (`requireApproval` on share, default false; `chorus-approve` / `chorus-deny`)
 - Security: display name required on join (reject empty / whitespace)
