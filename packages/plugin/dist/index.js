@@ -865,7 +865,7 @@ export default async function chorusPlugin(input) {
                     sharing = false;
                     stopLiveQueuePulse();
                     pendingQueue.clear();
-                    relay.stop();
+                    await relay.stop();
                     return JSON.stringify({ stopped: true });
                 },
             },
@@ -877,7 +877,7 @@ export default async function chorusPlugin(input) {
             mirroredEventIds.clear();
             stopLiveQueuePulse();
             pendingQueue.clear();
-            relay.stop();
+            await relay.stop();
         },
     };
 }

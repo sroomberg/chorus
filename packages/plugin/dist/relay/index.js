@@ -266,7 +266,7 @@ export class RelayServer {
     sendChat(displayName, content) {
         this.send({ type: "chat.send", content, displayName });
     }
-    stop() {
+    async stop() {
         // Only tear down session state on relays we own. External relays stay up
         // so container agents can reconnect across test runs.
         if (!this.external) {
@@ -279,16 +279,50 @@ export class RelayServer {
             // ignore
         }
         this.ws = null;
-        if (this.child && !this.child.killed) {
-            this.child.kill("SIGTERM");
-            setTimeout(() => {
-                if (this.child && !this.child.killed)
-                    this.child.kill("SIGKILL");
-            }, 1000).unref?.();
-        }
+        const child = this.child;
         this.child = null;
         this.running = false;
         this.clients = 0;
+        if (child && child.exitCode === null && child.signalCode === null) {
+            await new Promise((resolve) => {
+                const finish = () => resolve();
+                child.once("exit", finish);
+                try {
+                    child.kill("SIGTERM");
+                }
+                catch {
+                    finish();
+                    return;
+                }
+                setTimeout(() => {
+                    if (child.exitCode === null && child.signalCode === null) {
+                        try {
+                            child.kill("SIGKILL");
+                        }
+                        catch {
+                            finish();
+                        }
+                    }
+                }, 1000).unref?.();
+            });
+        }
+        if (!this.external) {
+            await this.waitUntilStopped();
+        }
+    }
+    async waitUntilStopped(timeoutMs = 2000) {
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+            try {
+                const res = await fetch(this.statusUrl(), { signal: AbortSignal.timeout(250) });
+                if (!res.ok)
+                    return;
+            }
+            catch {
+                return;
+            }
+            await new Promise((r) => setTimeout(r, 20));
+        }
     }
     get isRunning() {
         return this.running;
