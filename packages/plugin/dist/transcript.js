@@ -6,6 +6,8 @@ export const LABELED_LINE = /^\[[^\]]+\]:\s/;
 const CHORUS_SLASH = /\/chorus-(?:share|join|leave|stop|status|chat|approve|deny|kick)\b/i;
 const JOIN_NAMED_ARGS = /\btoken="[^"]+"\s+host="/;
 const HOSTING_LOOP_ERROR = /currently hosting the session/i;
+/** Live pending-join board injected into the host session. */
+const JOIN_QUEUE_BOARD = /^(?:Chorus join queue|New join request \[|Approved \[|Denied \[)/m;
 /** Non-synthetic text parts joined the same way chat.message used to inline. */
 export function userTextFromParts(parts) {
     if (!parts?.length)
@@ -20,7 +22,7 @@ export function isChorusControlText(text) {
     const trimmed = text.trim();
     if (!trimmed)
         return false;
-    return CHORUS_SLASH.test(trimmed) || JOIN_NAMED_ARGS.test(trimmed);
+    return (CHORUS_SLASH.test(trimmed) || JOIN_NAMED_ARGS.test(trimmed) || JOIN_QUEUE_BOARD.test(trimmed));
 }
 /**
  * Host auto-fan-out should only publish the host's own unlabeled prompts.

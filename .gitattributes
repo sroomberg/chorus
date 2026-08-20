@@ -1,0 +1,3 @@
+# Compiled TypeScript output is tracked for install, but it is generated.
+# GitHub hides linguist-generated files in PR diffs by default.
+**/dist/** linguist-generated=true
