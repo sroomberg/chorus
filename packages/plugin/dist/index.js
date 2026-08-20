@@ -6,7 +6,7 @@ import { detectRepoRemote } from "./git.js";
 import { loadChorusConfig, resolveDefaultRole, resolveRequireApproval, resolveAllowedEmailDomain, } from "./config/index.js";
 import { normalizeDisplayName, normalizeEmail } from "@chorus/shared";
 import { MIRROR_LINE, formatMirroredEvent, isChorusControlText, shouldFanOutHostUserText, shouldForwardJoinerInput, shouldPublishAssistantText, userTextFromParts, } from "./transcript.js";
-import { PendingQueue, formatPendingQueue, resolveQueueTarget, } from "./pending-queue.js";
+import { PendingQueue, formatPendingQueue, formatPendingQueueToast, resolveQueueTarget, } from "./pending-queue.js";
 import { networkInterfaces } from "node:os";
 import { mkdirSync, existsSync, copyFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -111,15 +111,21 @@ export default async function chorusPlugin(input) {
     const hostUserMessageIds = new Set();
     /** Short ids (1, 2, A) for pending joiners so the host need not paste a userId. */
     const pendingQueue = new PendingQueue();
-    function toast(message, variant = "info", duration = 4000) {
-        input.client.tui.showToast({ body: { message, variant, duration } }).catch(() => { });
+    /** Keep the join-queue toast visible while anyone is still waiting. */
+    let queueToastTimer = null;
+    /** Serialize live queue board writes (rapid join/leave). */
+    let queuePublishChain = Promise.resolve();
+    function toast(message, variant = "info", duration = 4000, title) {
+        input.client.tui
+            .showToast({ body: { ...(title ? { title } : {}), message, variant, duration } })
+            .catch(() => { });
     }
-    function say(sid, text) {
+    function say(sid, text, ignored = false) {
         input.client.session
             .prompt({
             throwOnError: false,
             path: { id: sid },
-            body: { noReply: true, parts: [{ type: "text", text }] },
+            body: { noReply: true, parts: [{ type: "text", text, ...(ignored ? { ignored: true } : {}) }] },
         })
             .catch(() => { });
     }
@@ -129,22 +135,72 @@ export default async function chorusPlugin(input) {
             pendingQueueText: formatPendingQueue(pendingQueue.list()),
         };
     }
-    function announcePendingQueue(prefix, toastMessage) {
+    function stopLiveQueuePulse() {
+        if (!queueToastTimer)
+            return;
+        clearInterval(queueToastTimer);
+        queueToastTimer = null;
+    }
+    function showLiveQueueToast() {
+        const entries = pendingQueue.list();
+        toast(formatPendingQueueToast(entries), entries.length ? "warning" : "info", entries.length ? 15_000 : 4000, "Chorus join queue");
+    }
+    function syncLiveQueuePulse() {
+        if (!sharing || pendingQueue.size === 0) {
+            stopLiveQueuePulse();
+            return;
+        }
+        if (queueToastTimer)
+            return;
+        queueToastTimer = setInterval(() => {
+            if (!sharing || pendingQueue.size === 0) {
+                stopLiveQueuePulse();
+                return;
+            }
+            showLiveQueueToast();
+        }, 12_000);
+        queueToastTimer.unref?.();
+    }
+    async function nudgeHostTui(sid) {
+        if (input.client.tui.selectSession) {
+            await input.client.tui.selectSession({ body: { sessionID: sid } }).catch(() => { });
+        }
+        if (input.client.tui.executeCommand) {
+            await input.client.tui
+                .executeCommand({ body: { command: "session.last" } })
+                .catch(() => { });
+        }
+    }
+    /** Push the current queue to toast + session so the host sees it as it changes. */
+    function publishLiveQueue(prefix) {
+        showLiveQueueToast();
+        syncLiveQueuePulse();
+        const sid = sessionId;
+        if (!sid)
+            return;
         const body = [prefix, formatPendingQueue(pendingQueue.list())].filter(Boolean).join("\n");
-        const first = pendingQueue.list()[0];
-        const toastHint = toastMessage ??
-            (first
-                ? `Join queue [${first.ref}] ${first.user.displayName}. /chorus-approve ${first.ref}`
-                : "No pending joiners.");
-        toast(toastHint, pendingQueue.size ? "warning" : "info", pendingQueue.size ? 12_000 : 4000);
-        if (sessionId)
-            say(sessionId, body);
+        queuePublishChain = queuePublishChain
+            .then(async () => {
+            if (!sharing || sessionId !== sid)
+                return;
+            await input.client.session.prompt({
+                throwOnError: false,
+                path: { id: sid },
+                body: {
+                    noReply: true,
+                    parts: [{ type: "text", text: body, ignored: true }],
+                },
+            });
+            await nudgeHostTui(sid);
+        })
+            .catch(() => { });
     }
     function admitPending(action, raw) {
         const resolved = resolveQueueTarget(pendingQueue, raw);
         if (!resolved.ok) {
+            showLiveQueueToast();
             if (sessionId)
-                say(sessionId, resolved.error);
+                say(sessionId, resolved.error, true);
             return { ok: false, error: resolved.error, ...pendingQueuePayload() };
         }
         if (action === "approve")
@@ -155,10 +211,7 @@ export default async function chorusPlugin(input) {
         const name = entry?.user.displayName ?? resolved.displayName ?? resolved.userId;
         const ref = resolved.ref ?? entry?.ref;
         const verb = action === "approve" ? "Approved" : "Denied";
-        if (sessionId) {
-            say(sessionId, `${verb} [${ref ?? "id"}] ${name}.\n${formatPendingQueue(pendingQueue.list())}`);
-        }
-        toast(`${verb} ${name}`, action === "approve" ? "success" : "info", 4000);
+        publishLiveQueue(`${verb} [${ref ?? "id"}] ${name}.`);
         return {
             ok: true,
             id: ref,
@@ -310,16 +363,18 @@ export default async function chorusPlugin(input) {
     relay.setUserPendingHandler((user) => {
         const entry = pendingQueue.enqueue(user);
         const email = user.email ? ` <${user.email}>` : "";
-        announcePendingQueue(`New join request [${entry.ref}] ${user.displayName}${email} wants ${user.role} access.`, `Join request [${entry.ref}] ${user.displayName} (${user.role}). /chorus-approve ${entry.ref}`);
+        publishLiveQueue(`New join request [${entry.ref}] ${user.displayName}${email} wants ${user.role} access.`);
     });
     relay.setUserJoinedHandler((user) => {
         pendingQueue.remove(user.userId);
         toast(`${user.displayName} joined (${user.role})`, "success", 4000);
+        if (pendingQueue.size)
+            showLiveQueueToast();
     });
     relay.setUserLeftHandler((userId) => {
         const removed = pendingQueue.remove(userId);
         if (removed) {
-            announcePendingQueue(`${removed.user.displayName} left before approval.`);
+            publishLiveQueue(`${removed.user.displayName} left before approval.`);
         }
         else {
             toast(`User left (${userId.slice(0, 8)}…)`, "info", 3000);
@@ -439,6 +494,7 @@ export default async function chorusPlugin(input) {
                     const grantedRole = resolveDefaultRole(config.security, args.role);
                     const requireApproval = resolveRequireApproval(config.security, args.requireApproval);
                     const sid = sessionId || context.sessionID;
+                    sessionId = sid;
                     // Hosting + joining on the same plugin instance mirrors events into itself.
                     if (joinClient) {
                         joinClient.disconnect();
@@ -498,7 +554,7 @@ export default async function chorusPlugin(input) {
                         config.org.name ? `Org: ${config.org.name}.` : null,
                         config.org.policyNote ?? null,
                         requireApproval
-                            ? "Joiners wait for your approval. Pending requests appear as a numbered queue; /chorus-approve 1 (or A)."
+                            ? "Joiners wait for your approval. The pending queue updates live on screen; /chorus-approve 1 (or A)."
                             : "Open join: token holders connect without approval.",
                         !config.security.allowSkipApproval
                             ? "Approval policy is locked by config (allowSkipApproval=false)."
@@ -651,7 +707,8 @@ export default async function chorusPlugin(input) {
                         .describe("Queue slot from the pending join list (1, 2, or A) or the full userId. " +
                         "Omit to approve the only pending joiner."),
                 },
-                async execute(args) {
+                async execute(args, context) {
+                    sessionId = sessionId || context.sessionID;
                     if (!sharing) {
                         return JSON.stringify({
                             approved: false,
@@ -687,7 +744,8 @@ export default async function chorusPlugin(input) {
                         .describe("Queue slot from the pending join list (1, 2, or A) or the full userId. " +
                         "Omit to deny the only pending joiner."),
                 },
-                async execute(args) {
+                async execute(args, context) {
+                    sessionId = sessionId || context.sessionID;
                     if (!sharing) {
                         return JSON.stringify({
                             denied: false,
@@ -805,6 +863,7 @@ export default async function chorusPlugin(input) {
                 args: {},
                 async execute() {
                     sharing = false;
+                    stopLiveQueuePulse();
                     pendingQueue.clear();
                     relay.stop();
                     return JSON.stringify({ stopped: true });
@@ -816,6 +875,7 @@ export default async function chorusPlugin(input) {
             joinClient = null;
             joinSessionId = "";
             mirroredEventIds.clear();
+            stopLiveQueuePulse();
             pendingQueue.clear();
             relay.stop();
         },

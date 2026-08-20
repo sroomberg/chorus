@@ -13,6 +13,7 @@ interface PluginInput {
                         type: "text";
                         text: string;
                         synthetic?: boolean;
+                        ignored?: boolean;
                     }>;
                 };
             }): Promise<unknown>;
@@ -143,7 +144,7 @@ export default function chorusPlugin(input: PluginInput): Promise<{
             };
             execute(args: {
                 userId?: string;
-            }): Promise<string>;
+            }, context: ToolContext): Promise<string>;
         };
         "chorus-deny": {
             description: string;
@@ -152,7 +153,7 @@ export default function chorusPlugin(input: PluginInput): Promise<{
             };
             execute(args: {
                 userId?: string;
-            }): Promise<string>;
+            }, context: ToolContext): Promise<string>;
         };
         "chorus-kick": {
             description: string;
