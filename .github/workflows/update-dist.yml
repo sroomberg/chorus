@@ -3,10 +3,13 @@ name: Update dist
 on:
   pull_request:
     branches: [main]
+    # Skip closed/merged PRs: the head branch is often deleted before checkout finishes.
+    types: [opened, synchronize, reopened]
 
 jobs:
   update-dist:
     name: Build and commit dist
+    if: github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -14,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
           token: ${{ github.token }}
 
       - uses: oven-sh/setup-bun@v2
@@ -37,5 +40,5 @@ jobs:
             echo "dist is already up to date"
           else
             git commit -m "chore: update dist [skip ci]"
-            git push
+            git push origin "HEAD:${{ github.head_ref }}"
           fi
