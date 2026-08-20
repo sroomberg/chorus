@@ -26,26 +26,24 @@ function user(
 }
 
 describe("slotToRef / isQueueSlot", () => {
-  it("treats decimal numbers and single letters as slots", () => {
+  it("treats decimal numbers as slots", () => {
     expect(isQueueSlot("1")).toBe(true);
     expect(isQueueSlot("12")).toBe(true);
-    expect(isQueueSlot("A")).toBe(true);
-    expect(isQueueSlot("z")).toBe(true);
     expect(isQueueSlot("01")).toBe(true);
   });
 
-  it("does not treat relay userIds as slots", () => {
+  it("does not treat letters or relay userIds as slots", () => {
+    expect(isQueueSlot("A")).toBe(false);
+    expect(isQueueSlot("z")).toBe(false);
     expect(isQueueSlot("a1b2c3d4e5f67890")).toBe(false);
     expect(isQueueSlot("Alice")).toBe(false);
     expect(isQueueSlot("")).toBe(false);
   });
 
-  it("normalizes 01 and A to 1", () => {
+  it("normalizes 01 to 1 and rejects 0", () => {
     expect(slotToRef("1")).toBe("1");
     expect(slotToRef("01")).toBe("1");
-    expect(slotToRef("A")).toBe("1");
-    expect(slotToRef("a")).toBe("1");
-    expect(slotToRef("B")).toBe("2");
+    expect(slotToRef("A")).toBeUndefined();
     expect(slotToRef("0")).toBeUndefined();
   });
 });
@@ -139,19 +137,23 @@ describe("resolveQueueTarget", () => {
     q.enqueue(user("cccc3333dddd4444", "Bob"));
   });
 
-  it("resolves numeric and letter slots", () => {
+  it("resolves numeric slots", () => {
     expect(resolveQueueTarget(q, "1")).toMatchObject({
       ok: true,
       ref: "1",
       userId: "aaaa1111bbbb2222",
       displayName: "Alice",
     });
-    expect(resolveQueueTarget(q, "B")).toMatchObject({
-      ok: true,
-      ref: "2",
-      userId: "cccc3333dddd4444",
-    });
     expect(resolveQueueTarget(q, " 02 ")).toMatchObject({ ok: true, ref: "2" });
+  });
+
+  it("does not treat a letter as a slot", () => {
+    expect(resolveQueueTarget(q, "B")).toEqual({
+      ok: true,
+      userId: "B",
+      ref: undefined,
+      displayName: undefined,
+    });
   });
 
   it("resolves a full userId", () => {
