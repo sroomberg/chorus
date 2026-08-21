@@ -40,7 +40,7 @@ export function systemConfigPath() {
  *   3. user file (`~/.config/chorus/config.json`)
  *   4. project file (`chorus.json` or `.chorus/config.json` under projectDir)
  *   5. explicit CHORUS_CONFIG path
- *   6. selected environment overrides (relay port, public host, backup)
+ *   6. selected environment overrides (relay port/bind/allowlist, public host, backup)
  */
 export function loadChorusConfig(projectDir) {
     const sources = [{ kind: "defaults" }];
@@ -95,6 +95,39 @@ function applyEnvOverrides(config) {
         next.relay.publicHost = process.env["CHORUS_PUBLIC_HOST"];
         applied = true;
     }
+    if (process.env["CHORUS_BIND"]) {
+        next.relay.bind = process.env["CHORUS_BIND"];
+        applied = true;
+    }
+    if (process.env["CHORUS_ALLOWED_CIDRS"]) {
+        next.relay.allowedCidrs = process.env["CHORUS_ALLOWED_CIDRS"]
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+        applied = true;
+    }
+    if (process.env["CHORUS_DENIED_CIDRS"]) {
+        next.relay.deniedCidrs = process.env["CHORUS_DENIED_CIDRS"]
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+        applied = true;
+    }
+    if (process.env["CHORUS_ALLOWED_PORTS"]) {
+        next.relay.allowedPorts = process.env["CHORUS_ALLOWED_PORTS"]
+            .split(",")
+            .map((s) => parseInt(s.trim(), 10))
+            .filter((n) => Number.isFinite(n) && n >= 1 && n <= 65535);
+        applied = true;
+    }
+    if (process.env["CHORUS_ALLOW_OPEN_BIND"] !== undefined) {
+        next.relay.allowOpenBind = parseEnvBool(process.env["CHORUS_ALLOW_OPEN_BIND"], true);
+        applied = true;
+    }
+    if (process.env["CHORUS_ALLOW_LOOPBACK"] !== undefined) {
+        next.relay.allowLoopback = parseEnvBool(process.env["CHORUS_ALLOW_LOOPBACK"], true);
+        applied = true;
+    }
     if (process.env["CHORUS_AWS_BUCKET"]) {
         next.backup.bucket = process.env["CHORUS_AWS_BUCKET"];
         applied = true;
@@ -108,6 +141,16 @@ function applyEnvOverrides(config) {
         applied = true;
     }
     return { config: next, applied };
+}
+function parseEnvBool(raw, fallback) {
+    if (raw === undefined)
+        return fallback;
+    const v = raw.trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(v))
+        return true;
+    if (["0", "false", "no", "off"].includes(v))
+        return false;
+    return fallback;
 }
 /**
  * Resolve effective requireApproval for a share invocation.

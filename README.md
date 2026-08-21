@@ -135,11 +135,15 @@ Copy [chorus.example.json](./chorus.example.json) to get started. Example enterp
     "repoRemoteRewrites": [{ "from": "github.acme.com", "to": "github.com" }],
     "defaultRole": "edit",
     "tokenTtlMs": 86400000
+  },
+  "relay": {
+    "allowOpenBind": false,
+    "allowedCidrs": ["10.0.0.0/8", "100.64.0.0/10"]
   }
 }
 ```
 
-These knobs are pairing controls, not a complete enterprise ACL: email and git remote are **self-asserted** on join, and later config layers (user/project) can still override `/etc/chorus/config.json`. See [docs/ENTERPRISE.md](docs/ENTERPRISE.md) for the gaps a security review will hit.
+These knobs are pairing controls, not a complete enterprise ACL: email and git remote are **self-asserted** on join, and later config layers (user/project) can still override `/etc/chorus/config.json`. See [docs/ENTERPRISE.md](docs/ENTERPRISE.md) for the gaps a security review will hit. For VPN / AWS VPC / Azure VNet / GCP VPC patterns, see [docs/NETWORK.md](docs/NETWORK.md).
 
 | Field | Default | Description |
 |---|---|---|
@@ -153,6 +157,12 @@ These knobs are pairing controls, not a complete enterprise ACL: email and git r
 | `security.defaultRole` | `edit` | Role when `/chorus-share` omits role |
 | `security.tokenTtlMs` | — | Optional join-token TTL |
 | `relay.port` / `relay.publicHost` | — | Relay listen / advertised join host |
+| `relay.bind` | `0.0.0.0` | Listen address (`CHORUS_BIND`) |
+| `relay.allowedCidrs` | `[]` | CIDR/IP allowlist; empty = unrestricted |
+| `relay.deniedCidrs` | `[]` | Explicit deny CIDRs (deny wins) |
+| `relay.allowedPorts` | `[]` | Peer source-port allowlist (single-machine e2e) |
+| `relay.allowOpenBind` | `true` | If `false`, refuse bind to `0.0.0.0` / `::` |
+| `relay.allowLoopback` | `true` | Admit loopback IP when an allow-CIDR list is set |
 | `backup.bucket` / `region` / `endpoint` | — | Optional S3/R2 backup |
 | `org.name` / `org.policyNote` | — | Shown in share + status |
 
@@ -166,6 +176,12 @@ These knobs are pairing controls, not a complete enterprise ACL: email and git r
 | `CHORUS_SYSTEM_CONFIG` | `/etc/chorus/config.json` | Org-wide config path |
 | `CHORUS_USER_CONFIG` | `~/.config/chorus/config.json` | Per-user config path override |
 | `CHORUS_PORT` | `7742` | Relay listen port (overrides file) |
+| `CHORUS_BIND` | `0.0.0.0` | Relay bind address |
+| `CHORUS_ALLOWED_CIDRS` | — | Comma-separated CIDR/IP allowlist |
+| `CHORUS_DENIED_CIDRS` | — | Comma-separated CIDR/IP denylist (deny wins) |
+| `CHORUS_ALLOWED_PORTS` | — | Comma-separated peer source ports |
+| `CHORUS_ALLOW_OPEN_BIND` | `true` | Set `false` to refuse `0.0.0.0` / `::` |
+| `CHORUS_ALLOW_LOOPBACK` | `true` | Admit loopback when allowlist is set |
 | `CHORUS_RELAY_BIN` | auto-detect | Path to `chorus-relay` binary |
 | `CHORUS_HOST_TOKEN` | random | Host control secret (set by plugin when spawning) |
 | `CHORUS_RELAY_HOST` | `127.0.0.1` | Relay host to attach to (e.g. `host.docker.internal:7742`) |
@@ -184,6 +200,7 @@ These knobs are pairing controls, not a complete enterprise ACL: email and git r
 | Host approval | Config `security.requireApproval` (default off); when on, joiners appear in a live numbered queue — `/chorus-approve 1` (full userId still works) |
 | Git repo gate | If the host share directory has `origin` (or `requireRepoMatch`), joiners must present the same remote. Extra prefixes/rewrites come from `additionalRepoRemotePrefixes` / `repoRemoteRewrites`. |
 | Company email gate | If `allowedEmailDomain` is set (or `requireEmailDomainMatch`), joiners must auth with an email at that domain |
+| Network allowlist | If `relay.allowedCidrs` is set, only those TCP peers reach `/ws` / `/host` (see [docs/NETWORK.md](docs/NETWORK.md)) |
 | Kick | `/chorus-kick <userId>` disconnects an active joiner |
 
 Remote tunneling (`bore` / `cloudflared`) is not implemented yet — share a LAN IP + port for now.
@@ -193,6 +210,7 @@ Remote tunneling (`bore` / `cloudflared`) is not implemented yet — share a LAN
 - [docs/STATUS.md](docs/STATUS.md) — what’s done and what still needs to happen
 - [docs/DECISIONS.md](docs/DECISIONS.md) — OpenCode plugin vs from-scratch, languages, license
 - [docs/ENTERPRISE.md](docs/ENTERPRISE.md) — security gaps for enterprise use (claims vs proofs, policy floor, SSO, audit)
+- [docs/NETWORK.md](docs/NETWORK.md) — CIDR allowlist, VPN, AWS VPC / Azure VNet / GCP VPC
 - [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md) — third-party license audit for commercial use
 
 ## License

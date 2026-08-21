@@ -37,6 +37,27 @@ export type RelayServerOptions = {
    * When true, requires hostToken and does not spawn/kill a subprocess.
    */
   external?: boolean;
+  /** Bind address passed to chorus-relay (default 0.0.0.0). */
+  bind?: string;
+  /** CIDR/IP allowlist for TCP peers. */
+  allowedCidrs?: string[];
+  /** Explicit deny CIDRs (deny wins). */
+  deniedCidrs?: string[];
+  /** Peer source-port allowlist (single-machine e2e). */
+  allowedPorts?: number[];
+  /** Refuse 0.0.0.0 / :: bind when false. */
+  allowOpenBind?: boolean;
+  /** Admit loopback IPs even when allowlist is set (default true). */
+  allowLoopback?: boolean;
+};
+
+export type RelayNetworkOptions = {
+  bind?: string;
+  allowedCidrs?: string[];
+  deniedCidrs?: string[];
+  allowedPorts?: number[];
+  allowOpenBind?: boolean;
+  allowLoopback?: boolean;
 };
 
 function parseRelayHost(raw: string | undefined, fallbackPort: number): { host: string; port: number } {
@@ -89,6 +110,12 @@ export class RelayServer {
   private clients = 0;
   private readonly host: string;
   private readonly external: boolean;
+  private bind: string;
+  private allowedCidrs: string[];
+  private deniedCidrs: string[];
+  private allowedPorts: number[];
+  private allowOpenBind: boolean;
+  private allowLoopback: boolean;
   private pendingToken: {
     resolve: (t: SessionToken) => void;
     reject: (e: Error) => void;
@@ -108,6 +135,22 @@ export class RelayServer {
     this.host = opts.host ?? "127.0.0.1";
     this.external = Boolean(opts.external);
     this.hostToken = opts.hostToken ?? "";
+    this.bind = opts.bind ?? "0.0.0.0";
+    this.allowedCidrs = opts.allowedCidrs ? [...opts.allowedCidrs] : [];
+    this.deniedCidrs = opts.deniedCidrs ? [...opts.deniedCidrs] : [];
+    this.allowedPorts = opts.allowedPorts ? [...opts.allowedPorts] : [];
+    this.allowOpenBind = opts.allowOpenBind ?? true;
+    this.allowLoopback = opts.allowLoopback ?? true;
+  }
+
+  /** Apply network policy before start() (from project/org chorus.json). */
+  setNetworkOptions(opts: RelayNetworkOptions): void {
+    if (opts.bind !== undefined) this.bind = opts.bind;
+    if (opts.allowedCidrs !== undefined) this.allowedCidrs = [...opts.allowedCidrs];
+    if (opts.deniedCidrs !== undefined) this.deniedCidrs = [...opts.deniedCidrs];
+    if (opts.allowedPorts !== undefined) this.allowedPorts = [...opts.allowedPorts];
+    if (opts.allowOpenBind !== undefined) this.allowOpenBind = opts.allowOpenBind;
+    if (opts.allowLoopback !== undefined) this.allowLoopback = opts.allowLoopback;
   }
 
   setInputHandler(
@@ -154,14 +197,32 @@ export class RelayServer {
     this.hostToken = this.hostToken || randomBytes(32).toString("hex");
     const bin = resolveRelayBin();
 
-    this.child = spawn(
-      bin,
-      ["--port", String(this.port), "--bind", "0.0.0.0", "--host-token", this.hostToken],
-      {
-        stdio: ["ignore", "ignore", "pipe"],
-        env: { ...process.env },
-      }
-    );
+    const args = [
+      "--port",
+      String(this.port),
+      "--bind",
+      this.bind,
+      "--host-token",
+      this.hostToken,
+      "--allow-open-bind",
+      this.allowOpenBind ? "true" : "false",
+      "--allow-loopback",
+      this.allowLoopback ? "true" : "false",
+    ];
+    for (const cidr of this.allowedCidrs) {
+      args.push("--allow-cidr", cidr);
+    }
+    for (const cidr of this.deniedCidrs) {
+      args.push("--deny-cidr", cidr);
+    }
+    for (const port of this.allowedPorts) {
+      args.push("--allow-port", String(port));
+    }
+
+    this.child = spawn(bin, args, {
+      stdio: ["ignore", "ignore", "pipe"],
+      env: { ...process.env },
+    });
 
     this.child.on("exit", () => {
       this.running = false;
@@ -422,6 +483,14 @@ export class RelayServer {
 
   getHost(): string {
     return this.host;
+  }
+
+  getBind(): string {
+    return this.bind;
+  }
+
+  getAllowedCidrs(): string[] {
+    return [...this.allowedCidrs];
   }
 
   isExternal(): boolean {
