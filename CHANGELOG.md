@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+## v2.0.0 — 2026-08-21
+
+Enterprise network lockdown for Chorus: keep the relay off the open internet with CIDR allowlists, private bind, and VPN/VPC deployment docs.
+
+GitHub tag `v2.0.0` is the source of truth for this release. `@chorus/plugin` remains install-from-git (packages are private). Rebuild `chorus-relay` from this tag — older binaries ignore the new flags.
+
+### Network access restrictions
+
+- **CIDR / IP allowlist** on `chorus-relay` (`--allow-cidr` / `relay.allowedCidrs` / `CHORUS_ALLOWED_CIDRS`) — peers outside the list get HTTP 403 before auth on `/ws`, `/host`, and `/status`
+- **Explicit deny CIDRs** (`--deny-cidr` / `relay.deniedCidrs` / `CHORUS_DENIED_CIDRS`) — deny wins over allow
+- **Source-port allowlist** (`--allow-port` / `relay.allowedPorts` / `CHORUS_ALLOWED_PORTS`) — for single-machine e2e and tight lockdowns (`bun run test:network-e2e`)
+- **Bind policy** — `relay.bind` / `CHORUS_BIND`; `relay.allowOpenBind: false` refuses `0.0.0.0` / `::`
+- Loopback IPs remain admitted by default when an allow-CIDR list is set (`allowLoopback`); source-port rules still apply
+- `/status` reports `{ network: { allowlist, denylist, allowedPorts, restricted } }`
+- Docs: [docs/NETWORK.md](docs/NETWORK.md) (corporate VPN, Tailscale, AWS VPC, Azure VNet, GCP VPC)
+
+### Config & env (new)
+
+| Control | Default | Notes |
+|---|---|---|
+| `relay.bind` / `CHORUS_BIND` | `0.0.0.0` | Listen address |
+| `relay.allowedCidrs` / `CHORUS_ALLOWED_CIDRS` | `[]` | Empty = unrestricted |
+| `relay.deniedCidrs` / `CHORUS_DENIED_CIDRS` | `[]` | Deny wins over allow |
+| `relay.allowedPorts` / `CHORUS_ALLOWED_PORTS` | `[]` | Peer source-port allowlist |
+| `relay.allowOpenBind` / `CHORUS_ALLOW_OPEN_BIND` | `true` | Set `false` for enterprise MDM |
+| `relay.allowLoopback` / `CHORUS_ALLOW_LOOPBACK` | `true` | Admit loopback IP when allowlisted |
+
+### Upgrade notes
+
+- Defaults are unchanged: LAN shares without an allowlist behave like v1.0.0.
+- Hosts must run a `chorus-relay` built from this release (or later) for allowlist/bind flags to take effect.
+- If `allowOpenBind` is `false` and `bind` is still open (`0.0.0.0` / `::`), `/chorus-share` fails with a clear error — set a private `bind` address.
+
+Example enterprise floor:
+
+```json
+{
+  "relay": {
+    "allowOpenBind": false,
+    "bind": "10.0.12.4",
+    "allowedCidrs": ["10.0.0.0/8", "100.64.0.0/10"]
+  }
+}
+```
+
 ## v1.0.0 — 2026-08-20
 
 First stable release of Chorus: **OpenCode↔OpenCode pair programming on one live AI session**. The host shares a session; collaborators join over a LAN WebSocket relay and send prompts into the same LLM turn. Side-channel chat stays in toasts; the shared transcript is mirrored into each joiner’s OpenCode session.

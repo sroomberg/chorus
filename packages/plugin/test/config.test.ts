@@ -39,6 +39,12 @@ describe("parseChorusConfig", () => {
         defaultRole: "view",
         tokenTtlMs: 3600000,
       },
+      relay: {
+        bind: "10.0.0.5",
+        allowOpenBind: false,
+        allowedCidrs: ["10.0.0.0/8", "100.64.0.0/10"],
+        allowLoopback: true,
+      },
     });
     expect(cfg.org.name).toBe("Acme");
     expect(cfg.security.allowSkipApproval).toBe(false);
@@ -51,6 +57,31 @@ describe("parseChorusConfig", () => {
     ]);
     expect(cfg.security.defaultRole).toBe("view");
     expect(cfg.security.tokenTtlMs).toBe(3600000);
+    expect(cfg.relay.bind).toBe("10.0.0.5");
+    expect(cfg.relay.allowOpenBind).toBe(false);
+    expect(cfg.relay.allowedCidrs).toEqual(["10.0.0.0/8", "100.64.0.0/10"]);
+    expect(cfg.relay.allowLoopback).toBe(true);
+  });
+
+  it("defaults relay network knobs to LAN-friendly", () => {
+    const cfg = parseChorusConfig({});
+    expect(cfg.relay.allowedCidrs).toEqual([]);
+    expect(cfg.relay.deniedCidrs).toEqual([]);
+    expect(cfg.relay.allowedPorts).toEqual([]);
+    expect(cfg.relay.allowOpenBind).toBe(true);
+    expect(cfg.relay.allowLoopback).toBe(true);
+    expect(cfg.relay.bind).toBeUndefined();
+  });
+
+  it("accepts deny CIDRs and source-port allowlist", () => {
+    const cfg = parseChorusConfig({
+      relay: {
+        deniedCidrs: ["203.0.113.0/24"],
+        allowedPorts: [18201, 18202],
+      },
+    });
+    expect(cfg.relay.deniedCidrs).toEqual(["203.0.113.0/24"]);
+    expect(cfg.relay.allowedPorts).toEqual([18201, 18202]);
   });
 
   it("rejects unknown top-level keys", () => {
@@ -127,6 +158,9 @@ describe("loadChorusConfig", () => {
   const prevSystem = process.env["CHORUS_SYSTEM_CONFIG"];
   const prevUser = process.env["CHORUS_USER_CONFIG"];
   const prevPort = process.env["CHORUS_PORT"];
+  const prevBind = process.env["CHORUS_BIND"];
+  const prevCidrs = process.env["CHORUS_ALLOWED_CIDRS"];
+  const prevOpenBind = process.env["CHORUS_ALLOW_OPEN_BIND"];
   let root: string;
 
   beforeEach(() => {
@@ -134,6 +168,9 @@ describe("loadChorusConfig", () => {
     mkdirSync(root, { recursive: true });
     delete process.env["CHORUS_CONFIG"];
     delete process.env["CHORUS_PORT"];
+    delete process.env["CHORUS_BIND"];
+    delete process.env["CHORUS_ALLOWED_CIDRS"];
+    delete process.env["CHORUS_ALLOW_OPEN_BIND"];
     // Isolate from real machine /etc and ~/.config during unit tests.
     process.env["CHORUS_SYSTEM_CONFIG"] = join(root, "missing-system.json");
     process.env["CHORUS_USER_CONFIG"] = join(root, "missing-user.json");
@@ -149,6 +186,12 @@ describe("loadChorusConfig", () => {
     else process.env["CHORUS_USER_CONFIG"] = prevUser;
     if (prevPort === undefined) delete process.env["CHORUS_PORT"];
     else process.env["CHORUS_PORT"] = prevPort;
+    if (prevBind === undefined) delete process.env["CHORUS_BIND"];
+    else process.env["CHORUS_BIND"] = prevBind;
+    if (prevCidrs === undefined) delete process.env["CHORUS_ALLOWED_CIDRS"];
+    else process.env["CHORUS_ALLOWED_CIDRS"] = prevCidrs;
+    if (prevOpenBind === undefined) delete process.env["CHORUS_ALLOW_OPEN_BIND"];
+    else process.env["CHORUS_ALLOW_OPEN_BIND"] = prevOpenBind;
   });
 
   it("loads project chorus.json", () => {
@@ -191,6 +234,17 @@ describe("loadChorusConfig", () => {
     const loaded = loadChorusConfig(root);
     expect(loaded.config.relay.port).toBe(2222);
     expect(loaded.sources.some((s) => s.kind === "env")).toBe(true);
+  });
+
+  it("applies network allowlist env overrides", () => {
+    writeFileSync(join(root, "chorus.json"), JSON.stringify({ relay: { port: 7742 } }));
+    process.env["CHORUS_BIND"] = "10.0.0.5";
+    process.env["CHORUS_ALLOWED_CIDRS"] = "10.0.0.0/8, 100.64.0.0/10";
+    process.env["CHORUS_ALLOW_OPEN_BIND"] = "false";
+    const loaded = loadChorusConfig(root);
+    expect(loaded.config.relay.bind).toBe("10.0.0.5");
+    expect(loaded.config.relay.allowedCidrs).toEqual(["10.0.0.0/8", "100.64.0.0/10"]);
+    expect(loaded.config.relay.allowOpenBind).toBe(false);
   });
 
   it("loads .chorus/config.json when chorus.json is absent", () => {

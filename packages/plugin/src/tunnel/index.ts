@@ -1,5 +1,6 @@
 // LAN-only in the MVP. Remote tunnel support (bore/cloudflared) is reserved for a future phase.
-// The relay server already binds to 0.0.0.0 so LAN access works without this module.
+// The relay server binds according to relay.bind / CHORUS_BIND (default 0.0.0.0).
+// Use relay.allowedCidrs + VPN/VPC controls for off-LAN lockdown — see docs/NETWORK.md.
 
 export interface TunnelInfo {
   publicUrl: string;
