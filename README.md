@@ -159,8 +159,10 @@ These knobs are pairing controls, not a complete enterprise ACL: email and git r
 | `relay.port` / `relay.publicHost` | — | Relay listen / advertised join host |
 | `relay.bind` | `0.0.0.0` | Listen address (`CHORUS_BIND`) |
 | `relay.allowedCidrs` | `[]` | CIDR/IP allowlist; empty = unrestricted |
+| `relay.deniedCidrs` | `[]` | Explicit deny CIDRs (deny wins) |
+| `relay.allowedPorts` | `[]` | Peer source-port allowlist (single-machine e2e) |
 | `relay.allowOpenBind` | `true` | If `false`, refuse bind to `0.0.0.0` / `::` |
-| `relay.allowLoopback` | `true` | Admit loopback when an allowlist is set |
+| `relay.allowLoopback` | `true` | Admit loopback IP when an allow-CIDR list is set |
 | `backup.bucket` / `region` / `endpoint` | — | Optional S3/R2 backup |
 | `org.name` / `org.policyNote` | — | Shown in share + status |
 
@@ -176,6 +178,8 @@ These knobs are pairing controls, not a complete enterprise ACL: email and git r
 | `CHORUS_PORT` | `7742` | Relay listen port (overrides file) |
 | `CHORUS_BIND` | `0.0.0.0` | Relay bind address |
 | `CHORUS_ALLOWED_CIDRS` | — | Comma-separated CIDR/IP allowlist |
+| `CHORUS_DENIED_CIDRS` | — | Comma-separated CIDR/IP denylist (deny wins) |
+| `CHORUS_ALLOWED_PORTS` | — | Comma-separated peer source ports |
 | `CHORUS_ALLOW_OPEN_BIND` | `true` | Set `false` to refuse `0.0.0.0` / `::` |
 | `CHORUS_ALLOW_LOOPBACK` | `true` | Admit loopback when allowlist is set |
 | `CHORUS_RELAY_BIN` | auto-detect | Path to `chorus-relay` binary |

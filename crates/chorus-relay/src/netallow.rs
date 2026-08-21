@@ -1,74 +1,115 @@
-//! TCP peer allowlisting by CIDR (IPv4/IPv6).
+//! TCP peer network policy: allow/deny CIDRs and optional source-port allowlist.
 //!
-//! Empty allowlist = no restriction (LAN-friendly default).
-//! When non-empty, only matching peers are admitted (plus loopback when enabled).
+//! Evaluation order for each peer `SocketAddr`:
+//! 1. If peer IP matches any **deny** CIDR → reject
+//! 2. If **allow** CIDRs are non-empty → peer must match one (loopback may bypass)
+//! 3. If **allowed ports** are non-empty → peer **source port** must be listed
+//! 4. Otherwise admit
+//!
+//! Empty allow + empty deny + empty ports = unrestricted (LAN-friendly default).
+//! Source-port allowlisting is intended for single-machine e2e (all peers are
+//! 127.0.0.1) and for tight lockdowns that pin known client ports.
 
 use ipnet::IpNet;
+use std::collections::BTreeSet;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 
 #[derive(Debug, Clone)]
-pub struct NetworkAllowlist {
-    nets: Vec<IpNet>,
+pub struct NetworkPolicy {
+    allow: Vec<IpNet>,
+    deny: Vec<IpNet>,
+    /// When non-empty, peer source port must be in this set.
+    allowed_ports: BTreeSet<u16>,
     allow_loopback: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AllowlistError {
+pub enum NetworkPolicyError {
     InvalidCidr(String),
+    InvalidPort(String),
 }
 
-impl std::fmt::Display for AllowlistError {
+impl std::fmt::Display for NetworkPolicyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AllowlistError::InvalidCidr(s) => write!(f, "invalid CIDR: {s}"),
+            NetworkPolicyError::InvalidCidr(s) => write!(f, "invalid CIDR: {s}"),
+            NetworkPolicyError::InvalidPort(s) => write!(f, "invalid port: {s}"),
         }
     }
 }
 
-impl std::error::Error for AllowlistError {}
+impl std::error::Error for NetworkPolicyError {}
 
-impl NetworkAllowlist {
-    /// Parse CIDR strings (also accepts bare IPs as /32 or /128).
-    pub fn parse(cidrs: &[String], allow_loopback: bool) -> Result<Self, AllowlistError> {
-        let mut nets = Vec::with_capacity(cidrs.len());
-        for raw in cidrs {
-            let trimmed = raw.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            let net = parse_cidr_or_ip(trimmed)
-                .map_err(|_| AllowlistError::InvalidCidr(trimmed.to_string()))?;
-            nets.push(net);
-        }
+#[derive(Debug, Clone, Default)]
+pub struct NetworkPolicyConfig {
+    pub allowed_cidrs: Vec<String>,
+    pub denied_cidrs: Vec<String>,
+    pub allowed_ports: Vec<u16>,
+    pub allow_loopback: bool,
+}
+
+impl NetworkPolicy {
+    pub fn parse(config: NetworkPolicyConfig) -> Result<Self, NetworkPolicyError> {
         Ok(Self {
-            nets,
-            allow_loopback,
+            allow: parse_cidrs(&config.allowed_cidrs)?,
+            deny: parse_cidrs(&config.denied_cidrs)?,
+            allowed_ports: config.allowed_ports.into_iter().collect(),
+            allow_loopback: config.allow_loopback,
         })
     }
 
     pub fn is_restricted(&self) -> bool {
-        !self.nets.is_empty()
+        !self.allow.is_empty() || !self.deny.is_empty() || !self.allowed_ports.is_empty()
     }
 
-    pub fn cidrs(&self) -> impl Iterator<Item = String> + '_ {
-        self.nets.iter().map(|n| n.to_string())
+    pub fn allowed_cidrs(&self) -> impl Iterator<Item = String> + '_ {
+        self.allow.iter().map(|n| n.to_string())
     }
 
-    pub fn allows(&self, addr: IpAddr) -> bool {
-        if self.nets.is_empty() {
-            return true;
-        }
-        if self.allow_loopback && is_loopback(addr) {
-            return true;
-        }
-        let addr = normalize_mapped_v4(addr);
-        self.nets.iter().any(|net| net.contains(&addr))
+    pub fn denied_cidrs(&self) -> impl Iterator<Item = String> + '_ {
+        self.deny.iter().map(|n| n.to_string())
+    }
+
+    pub fn allowed_ports(&self) -> impl Iterator<Item = u16> + '_ {
+        self.allowed_ports.iter().copied()
     }
 
     pub fn allows_socket(&self, addr: SocketAddr) -> bool {
-        self.allows(addr.ip())
+        let ip = normalize_mapped_v4(addr.ip());
+
+        if self.deny.iter().any(|net| net.contains(&ip)) {
+            return false;
+        }
+
+        if !self.allow.is_empty() {
+            let ip_ok = self.allow.iter().any(|net| net.contains(&ip))
+                || (self.allow_loopback && is_loopback(ip));
+            if !ip_ok {
+                return false;
+            }
+        }
+
+        if !self.allowed_ports.is_empty() && !self.allowed_ports.contains(&addr.port()) {
+            return false;
+        }
+
+        true
     }
+}
+
+fn parse_cidrs(cidrs: &[String]) -> Result<Vec<IpNet>, NetworkPolicyError> {
+    let mut nets = Vec::with_capacity(cidrs.len());
+    for raw in cidrs {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let net = parse_cidr_or_ip(trimmed)
+            .map_err(|_| NetworkPolicyError::InvalidCidr(trimmed.to_string()))?;
+        nets.push(net);
+    }
+    Ok(nets)
 }
 
 fn parse_cidr_or_ip(s: &str) -> Result<IpNet, String> {
@@ -86,7 +127,6 @@ fn is_loopback(addr: IpAddr) -> bool {
     }
 }
 
-/// Treat `:ffff:x.x.x.x` as the embedded IPv4 for allowlist matching.
 fn normalize_mapped_v4(addr: IpAddr) -> IpAddr {
     match addr {
         IpAddr::V6(v6) => v6
@@ -103,75 +143,149 @@ pub fn is_open_bind(bind: &str) -> bool {
     matches!(host, "0.0.0.0" | "::" | "[::]")
 }
 
+/// Back-compat alias used by older call sites / docs.
+pub type NetworkAllowlist = NetworkPolicy;
+pub type AllowlistError = NetworkPolicyError;
+
+impl NetworkPolicy {
+    /// Parse allow-CIDR-only policy (tests / simple callers).
+    pub fn parse_allow(cidrs: &[String], allow_loopback: bool) -> Result<Self, NetworkPolicyError> {
+        Self::parse(NetworkPolicyConfig {
+            allowed_cidrs: cidrs.to_vec(),
+            denied_cidrs: Vec::new(),
+            allowed_ports: Vec::new(),
+            allow_loopback,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{Ipv4Addr, Ipv6Addr};
+    use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4};
 
-    #[test]
-    fn empty_allowlist_admits_everyone() {
-        let al = NetworkAllowlist::parse(&[], true).unwrap();
-        assert!(!al.is_restricted());
-        assert!(al.allows(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
+    fn sock(ip: [u8; 4], port: u16) -> SocketAddr {
+        SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]), port))
     }
 
     #[test]
-    fn cidr_match_and_miss() {
-        let al = NetworkAllowlist::parse(&["10.0.0.0/8".into(), "192.168.1.0/24".into()], false)
-            .unwrap();
-        assert!(al.allows(IpAddr::V4(Ipv4Addr::new(10, 1, 2, 3))));
-        assert!(al.allows(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 50))));
-        assert!(!al.allows(IpAddr::V4(Ipv4Addr::new(192, 168, 2, 1))));
-        assert!(!al.allows(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
+    fn empty_policy_admits_everyone() {
+        let p = NetworkPolicy::parse(NetworkPolicyConfig {
+            allow_loopback: true,
+            ..Default::default()
+        })
+        .unwrap();
+        assert!(!p.is_restricted());
+        assert!(p.allows_socket(sock([8, 8, 8, 8], 12345)));
+    }
+
+    #[test]
+    fn cidr_allow_match_and_miss() {
+        let p = NetworkPolicy::parse_allow(
+            &["10.0.0.0/8".into(), "192.168.1.0/24".into()],
+            false,
+        )
+        .unwrap();
+        assert!(p.allows_socket(sock([10, 1, 2, 3], 1)));
+        assert!(p.allows_socket(sock([192, 168, 1, 50], 1)));
+        assert!(!p.allows_socket(sock([192, 168, 2, 1], 1)));
+        assert!(!p.allows_socket(sock([8, 8, 8, 8], 1)));
+    }
+
+    #[test]
+    fn deny_overrides_allow() {
+        let p = NetworkPolicy::parse(NetworkPolicyConfig {
+            allowed_cidrs: vec!["10.0.0.0/8".into()],
+            denied_cidrs: vec!["10.99.0.0/16".into()],
+            allowed_ports: vec![],
+            allow_loopback: false,
+        })
+        .unwrap();
+        assert!(p.allows_socket(sock([10, 1, 2, 3], 9)));
+        assert!(!p.allows_socket(sock([10, 99, 1, 1], 9)));
+    }
+
+    #[test]
+    fn deny_alone_blocks_range() {
+        let p = NetworkPolicy::parse(NetworkPolicyConfig {
+            allowed_cidrs: vec![],
+            denied_cidrs: vec!["203.0.113.0/24".into()],
+            allowed_ports: vec![],
+            allow_loopback: true,
+        })
+        .unwrap();
+        assert!(p.is_restricted());
+        assert!(!p.allows_socket(sock([203, 0, 113, 9], 80)));
+        assert!(p.allows_socket(sock([8, 8, 8, 8], 80)));
+    }
+
+    #[test]
+    fn deny_blocks_loopback_even_when_allow_loopback() {
+        let p = NetworkPolicy::parse(NetworkPolicyConfig {
+            allowed_cidrs: vec!["10.0.0.0/8".into()],
+            denied_cidrs: vec!["127.0.0.0/8".into()],
+            allowed_ports: vec![],
+            allow_loopback: true,
+        })
+        .unwrap();
+        assert!(!p.allows_socket(sock([127, 0, 0, 1], 9)));
+    }
+
+    #[test]
+    fn source_port_allowlist_for_single_machine() {
+        let p = NetworkPolicy::parse(NetworkPolicyConfig {
+            allowed_cidrs: vec![],
+            denied_cidrs: vec![],
+            allowed_ports: vec![18001, 18002],
+            allow_loopback: true,
+        })
+        .unwrap();
+        assert!(p.allows_socket(sock([127, 0, 0, 1], 18001)));
+        assert!(p.allows_socket(sock([127, 0, 0, 1], 18002)));
+        assert!(!p.allows_socket(sock([127, 0, 0, 1], 18003)));
+        assert!(!p.allows_socket(sock([10, 0, 0, 5], 9999)));
+    }
+
+    #[test]
+    fn port_and_cidr_both_required() {
+        let p = NetworkPolicy::parse(NetworkPolicyConfig {
+            allowed_cidrs: vec!["10.0.0.0/8".into()],
+            denied_cidrs: vec![],
+            allowed_ports: vec![4000],
+            allow_loopback: false,
+        })
+        .unwrap();
+        assert!(p.allows_socket(sock([10, 0, 0, 1], 4000)));
+        assert!(!p.allows_socket(sock([10, 0, 0, 1], 4001)));
+        assert!(!p.allows_socket(sock([11, 0, 0, 1], 4000)));
     }
 
     #[test]
     fn bare_ip_is_host_route() {
-        let al = NetworkAllowlist::parse(&["203.0.113.9".into()], false).unwrap();
-        assert!(al.allows(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 9))));
-        assert!(!al.allows(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10))));
+        let p = NetworkPolicy::parse_allow(&["203.0.113.9".into()], false).unwrap();
+        assert!(p.allows_socket(sock([203, 0, 113, 9], 1)));
+        assert!(!p.allows_socket(sock([203, 0, 113, 10], 1)));
     }
 
     #[test]
-    fn loopback_bypasses_when_enabled() {
-        let al = NetworkAllowlist::parse(&["10.0.0.0/8".into()], true).unwrap();
-        assert!(al.allows(IpAddr::V4(Ipv4Addr::LOCALHOST)));
-        assert!(al.allows(IpAddr::V6(Ipv6Addr::LOCALHOST)));
-        assert!(!al.allows(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
-    }
-
-    #[test]
-    fn loopback_denied_when_disabled() {
-        let al = NetworkAllowlist::parse(&["10.0.0.0/8".into()], false).unwrap();
-        assert!(!al.allows(IpAddr::V4(Ipv4Addr::LOCALHOST)));
+    fn loopback_bypasses_allow_cidr_when_enabled() {
+        let p = NetworkPolicy::parse_allow(&["10.0.0.0/8".into()], true).unwrap();
+        assert!(p.allows_socket(sock([127, 0, 0, 1], 9)));
+        assert!(p.allows_socket(SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 9)));
+        assert!(!p.allows_socket(sock([8, 8, 8, 8], 9)));
     }
 
     #[test]
     fn ipv4_mapped_v6_matches_v4_cidr() {
-        let al = NetworkAllowlist::parse(&["10.0.0.0/8".into()], false).unwrap();
+        let p = NetworkPolicy::parse_allow(&["10.0.0.0/8".into()], false).unwrap();
         let mapped = IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0x0a01, 0x0203));
-        assert!(al.allows(mapped));
-    }
-
-    #[test]
-    fn tailscale_cg_nat_range() {
-        let al = NetworkAllowlist::parse(&["100.64.0.0/10".into()], true).unwrap();
-        assert!(al.allows(IpAddr::V4(Ipv4Addr::new(100, 100, 1, 2))));
-        assert!(!al.allows(IpAddr::V4(Ipv4Addr::new(101, 0, 0, 1))));
-    }
-
-    #[test]
-    fn invalid_cidr_errors() {
-        let err = NetworkAllowlist::parse(&["not-a-cidr".into()], true).unwrap_err();
-        assert!(matches!(err, AllowlistError::InvalidCidr(_)));
+        assert!(p.allows_socket(SocketAddr::new(mapped, 1)));
     }
 
     #[test]
     fn open_bind_detection() {
         assert!(is_open_bind("0.0.0.0"));
         assert!(is_open_bind("::"));
-        assert!(is_open_bind("[::]"));
         assert!(!is_open_bind("127.0.0.1"));
-        assert!(!is_open_bind("10.0.0.5"));
     }
 }

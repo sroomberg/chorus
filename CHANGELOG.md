@@ -11,9 +11,11 @@ GitHub tag `v2.0.0` is the source of truth for this release. `@chorus/plugin` re
 ### Network access restrictions
 
 - **CIDR / IP allowlist** on `chorus-relay` (`--allow-cidr` / `relay.allowedCidrs` / `CHORUS_ALLOWED_CIDRS`) — peers outside the list get HTTP 403 before auth on `/ws`, `/host`, and `/status`
+- **Explicit deny CIDRs** (`--deny-cidr` / `relay.deniedCidrs` / `CHORUS_DENIED_CIDRS`) — deny wins over allow
+- **Source-port allowlist** (`--allow-port` / `relay.allowedPorts` / `CHORUS_ALLOWED_PORTS`) — for single-machine e2e and tight lockdowns (`bun run test:network-e2e`)
 - **Bind policy** — `relay.bind` / `CHORUS_BIND`; `relay.allowOpenBind: false` refuses `0.0.0.0` / `::`
-- Loopback remains admitted by default when an allowlist is set (`allowLoopback`) so the host plugin can reach `/host`
-- `/status` reports `{ network: { allowlist, restricted } }`
+- Loopback IPs remain admitted by default when an allow-CIDR list is set (`allowLoopback`); source-port rules still apply
+- `/status` reports `{ network: { allowlist, denylist, allowedPorts, restricted } }`
 - Docs: [docs/NETWORK.md](docs/NETWORK.md) (corporate VPN, Tailscale, AWS VPC, Azure VNet, GCP VPC)
 
 ### Config & env (new)
@@ -22,8 +24,10 @@ GitHub tag `v2.0.0` is the source of truth for this release. `@chorus/plugin` re
 |---|---|---|
 | `relay.bind` / `CHORUS_BIND` | `0.0.0.0` | Listen address |
 | `relay.allowedCidrs` / `CHORUS_ALLOWED_CIDRS` | `[]` | Empty = unrestricted |
+| `relay.deniedCidrs` / `CHORUS_DENIED_CIDRS` | `[]` | Deny wins over allow |
+| `relay.allowedPorts` / `CHORUS_ALLOWED_PORTS` | `[]` | Peer source-port allowlist |
 | `relay.allowOpenBind` / `CHORUS_ALLOW_OPEN_BIND` | `true` | Set `false` for enterprise MDM |
-| `relay.allowLoopback` / `CHORUS_ALLOW_LOOPBACK` | `true` | Admit loopback when allowlisted |
+| `relay.allowLoopback` / `CHORUS_ALLOW_LOOPBACK` | `true` | Admit loopback IP when allowlisted |
 
 ### Upgrade notes
 

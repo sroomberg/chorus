@@ -1,5 +1,5 @@
 use crate::access::AccessManager;
-use crate::netallow::{is_open_bind, NetworkAllowlist};
+use crate::netallow::{is_open_bind, NetworkPolicy, NetworkPolicyConfig};
 use crate::protocol::{
     email_matches_domain, normalize_display_name, normalize_email, sanitize_repo_remote_prefixes,
     sanitize_repo_remote_rewrites, ChatMessage, ClientMessage, HostToRelay, RelayToHost,
@@ -37,7 +37,7 @@ fn random_hex(bytes: usize) -> String {
 pub struct AppState {
     pub relay: SharedState,
     pub host_token: Arc<String>,
-    pub allowlist: Arc<NetworkAllowlist>,
+    pub network: Arc<NetworkPolicy>,
 }
 
 pub struct RelayConfig {
@@ -46,6 +46,10 @@ pub struct RelayConfig {
     pub bind: String,
     /// When non-empty, only these CIDRs (plus loopback if enabled) may connect.
     pub allowed_cidrs: Vec<String>,
+    /// Explicit deny CIDRs — evaluated before allow (deny wins).
+    pub denied_cidrs: Vec<String>,
+    /// When non-empty, only these peer **source ports** may connect (single-machine e2e).
+    pub allowed_ports: Vec<u16>,
     /// When false, refuse bind to 0.0.0.0 / :: (enterprise default for MDM).
     pub allow_open_bind: bool,
     /// When allowlist is set, still admit 127.0.0.0/8 and ::1 (host plugin).
@@ -59,6 +63,8 @@ impl Default for RelayConfig {
             host_token: String::new(),
             bind: "0.0.0.0".into(),
             allowed_cidrs: Vec::new(),
+            denied_cidrs: Vec::new(),
+            allowed_ports: Vec::new(),
             allow_open_bind: true,
             allow_loopback: true,
         }
@@ -66,7 +72,7 @@ impl Default for RelayConfig {
 }
 
 fn peer_allowed(state: &AppState, peer: SocketAddr) -> bool {
-    state.allowlist.allows_socket(peer)
+    state.network.allows_socket(peer)
 }
 
 pub async fn serve(config: RelayConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -78,20 +84,29 @@ pub async fn serve(config: RelayConfig) -> Result<(), Box<dyn std::error::Error 
         .into());
     }
 
-    let allowlist = NetworkAllowlist::parse(&config.allowed_cidrs, config.allow_loopback)?;
-    if allowlist.is_restricted() {
-        let cidrs: Vec<String> = allowlist.cidrs().collect();
+    let network = NetworkPolicy::parse(NetworkPolicyConfig {
+        allowed_cidrs: config.allowed_cidrs,
+        denied_cidrs: config.denied_cidrs,
+        allowed_ports: config.allowed_ports,
+        allow_loopback: config.allow_loopback,
+    })?;
+    if network.is_restricted() {
+        let allow: Vec<String> = network.allowed_cidrs().collect();
+        let deny: Vec<String> = network.denied_cidrs().collect();
+        let ports: Vec<String> = network.allowed_ports().map(|p| p.to_string()).collect();
         tracing::info!(
-            "network allowlist enabled (loopback={}): {}",
+            "network policy enabled (loopback={}): allow=[{}] deny=[{}] ports=[{}]",
             config.allow_loopback,
-            cidrs.join(", ")
+            allow.join(", "),
+            deny.join(", "),
+            ports.join(", ")
         );
     }
 
     let state = AppState {
         relay: Arc::new(RwLock::new(RelayState::new(config.port))),
         host_token: Arc::new(config.host_token),
-        allowlist: Arc::new(allowlist),
+        network: Arc::new(network),
     };
 
     let app = Router::new()
@@ -142,13 +157,17 @@ async fn status(
             .into_response();
     }
     let guard = state.relay.read().await;
-    let cidrs: Vec<String> = state.allowlist.cidrs().collect();
+    let allow: Vec<String> = state.network.allowed_cidrs().collect();
+    let deny: Vec<String> = state.network.denied_cidrs().collect();
+    let ports: Vec<u16> = state.network.allowed_ports().collect();
     Json(serde_json::json!({
         "status": "ok",
         "clients": guard.client_count(),
         "network": {
-            "allowlist": cidrs,
-            "restricted": state.allowlist.is_restricted(),
+            "allowlist": allow,
+            "denylist": deny,
+            "allowedPorts": ports,
+            "restricted": state.network.is_restricted(),
         },
     }))
     .into_response()

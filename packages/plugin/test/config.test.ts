@@ -66,9 +66,22 @@ describe("parseChorusConfig", () => {
   it("defaults relay network knobs to LAN-friendly", () => {
     const cfg = parseChorusConfig({});
     expect(cfg.relay.allowedCidrs).toEqual([]);
+    expect(cfg.relay.deniedCidrs).toEqual([]);
+    expect(cfg.relay.allowedPorts).toEqual([]);
     expect(cfg.relay.allowOpenBind).toBe(true);
     expect(cfg.relay.allowLoopback).toBe(true);
     expect(cfg.relay.bind).toBeUndefined();
+  });
+
+  it("accepts deny CIDRs and source-port allowlist", () => {
+    const cfg = parseChorusConfig({
+      relay: {
+        deniedCidrs: ["203.0.113.0/24"],
+        allowedPorts: [18201, 18202],
+      },
+    });
+    expect(cfg.relay.deniedCidrs).toEqual(["203.0.113.0/24"]);
+    expect(cfg.relay.allowedPorts).toEqual([18201, 18202]);
   });
 
   it("rejects unknown top-level keys", () => {

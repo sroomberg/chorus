@@ -26,8 +26,10 @@ Configure in `chorus.json` (or `/etc/chorus/config.json` / env):
 |---|---|---|
 | `relay.bind` / `CHORUS_BIND` | `0.0.0.0` | Listen address |
 | `relay.allowOpenBind` / `CHORUS_ALLOW_OPEN_BIND` | `true` | When `false`, refuse bind to `0.0.0.0` / `::` |
-| `relay.allowedCidrs` / `CHORUS_ALLOWED_CIDRS` | `[]` | CIDR or IP list; empty = unrestricted |
-| `relay.allowLoopback` / `CHORUS_ALLOW_LOOPBACK` | `true` | When allowlist is set, still admit `127.0.0.0/8` and `::1` (host plugin) |
+| `relay.allowedCidrs` / `CHORUS_ALLOWED_CIDRS` | `[]` | CIDR or IP allow list; empty = no allow restriction |
+| `relay.deniedCidrs` / `CHORUS_DENIED_CIDRS` | `[]` | Explicit deny CIDRs (deny wins over allow) |
+| `relay.allowedPorts` / `CHORUS_ALLOWED_PORTS` | `[]` | Peer **source port** allowlist; empty = any port |
+| `relay.allowLoopback` / `CHORUS_ALLOW_LOOPBACK` | `true` | When allow-CIDRs set, still admit loopback IPs (ports still enforced) |
 
 CLI equivalent when running `chorus-relay` directly:
 
@@ -36,15 +38,36 @@ chorus-relay \
   --bind 10.0.12.4 \
   --allow-open-bind false \
   --allow-cidr 10.0.0.0/8 \
-  --allow-cidr 100.64.0.0/10
+  --allow-cidr 100.64.0.0/10 \
+  --deny-cidr 203.0.113.0/24 \
+  --allow-port 18201 \
+  --allow-port 18202
 ```
 
-Peers outside the allowlist get **HTTP 403** / failed WebSocket upgrade (`NETWORK_ACCESS_DENIED`) before auth. Matching uses the **TCP peer address** (not `X-Forwarded-For`). Put the allowlist on the process that terminates the client connection, or rely on the edge security group when fronted by a load balancer.
+Evaluation order per TCP peer:
 
-`/status` reports whether an allowlist is active:
+1. **Deny CIDR** match → reject
+2. **Allow CIDR** (if non-empty) → must match (loopback may bypass when `allowLoopback`)
+3. **Allowed source ports** (if non-empty) → peer source port must be listed
+4. Otherwise admit
+
+Source-port allowlisting is how single-machine e2e distinguishes clients that all appear as `127.0.0.1`. See `bun run test:network-e2e`.
+
+Peers outside policy get **HTTP 403** / failed WebSocket upgrade (`NETWORK_ACCESS_DENIED`) before auth. Matching uses the **TCP peer address and source port** (not `X-Forwarded-For`). Put the policy on the process that terminates the client connection, or rely on the edge security group when fronted by a load balancer.
+
+`/status` reports whether a policy is active:
 
 ```json
-{ "status": "ok", "clients": 0, "network": { "allowlist": ["10.0.0.0/8"], "restricted": true } }
+{
+  "status": "ok",
+  "clients": 0,
+  "network": {
+    "allowlist": ["10.0.0.0/8"],
+    "denylist": ["203.0.113.0/24"],
+    "allowedPorts": [18201, 18202],
+    "restricted": true
+  }
+}
 ```
 
 ## Recommended patterns

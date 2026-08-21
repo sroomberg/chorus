@@ -19,6 +19,8 @@
     "allowOpenBind": false,
     "bind": "10.0.12.4",
     "allowedCidrs": ["10.0.0.0/8", "100.64.0.0/10"],
+    "deniedCidrs": ["203.0.113.0/24"],
+    "allowedPorts": [],
     "allowLoopback": true
   },
   "backup": {

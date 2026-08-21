@@ -20,6 +20,8 @@ async fn start_relay(port: u16, host_token: &str) {
             host_token: token,
             bind: "127.0.0.1".into(),
             allowed_cidrs: Vec::new(),
+            denied_cidrs: Vec::new(),
+            allowed_ports: Vec::new(),
             allow_open_bind: true,
             allow_loopback: true,
         })
@@ -583,6 +585,8 @@ async fn allowlist_admits_loopback_by_default() {
         host_token: host_token.into(),
         bind: "127.0.0.1".into(),
         allowed_cidrs: vec!["10.0.0.0/8".into()],
+        denied_cidrs: Vec::new(),
+        allowed_ports: Vec::new(),
         allow_open_bind: true,
         allow_loopback: true,
     })
@@ -621,6 +625,8 @@ async fn allowlist_rejects_loopback_when_disabled() {
         host_token: host_token.into(),
         bind: "127.0.0.1".into(),
         allowed_cidrs: vec!["10.0.0.0/8".into()],
+        denied_cidrs: Vec::new(),
+        allowed_ports: Vec::new(),
         allow_open_bind: true,
         allow_loopback: false,
     })
@@ -644,6 +650,8 @@ async fn refuse_open_bind_when_disabled() {
         host_token: "x".into(),
         bind: "0.0.0.0".into(),
         allowed_cidrs: Vec::new(),
+        denied_cidrs: Vec::new(),
+        allowed_ports: Vec::new(),
         allow_open_bind: false,
         allow_loopback: true,
     })
@@ -662,11 +670,27 @@ struct HttpStatus {
 }
 
 async fn http_status(port: u16) -> HttpStatus {
+    http_status_from_local(port, 0).await
+}
+
+/// GET /status using a bound local source port (`0` = ephemeral).
+async fn http_status_from_local(relay_port: u16, local_port: u16) -> HttpStatus {
+    use std::net::{Ipv4Addr, SocketAddr};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+    use tokio::net::TcpSocket;
+
+    let socket = TcpSocket::new_v4().expect("socket");
+    socket.set_reuseaddr(true).ok();
+    if local_port != 0 {
+        socket
+            .bind(SocketAddr::from((Ipv4Addr::LOCALHOST, local_port)))
+            .expect("bind local");
+    }
+    let mut stream = socket
+        .connect(SocketAddr::from((Ipv4Addr::LOCALHOST, relay_port)))
         .await
-        .expect("tcp");
-    let req = format!("GET /status HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        .expect("connect");
+    let req = format!("GET /status HTTP/1.0\r\nHost: 127.0.0.1:{relay_port}\r\n\r\n");
     stream.write_all(req.as_bytes()).await.unwrap();
     let mut buf = Vec::new();
     stream.read_to_end(&mut buf).await.unwrap();
@@ -681,4 +705,50 @@ async fn http_status(port: u16) -> HttpStatus {
         status,
         body: text.into_owned(),
     }
+}
+
+#[tokio::test]
+async fn source_port_allowlist_admits_a_and_b_rejects_c() {
+    let port = 18756;
+    start_relay_with(RelayConfig {
+        port,
+        host_token: "port-allow-token".into(),
+        bind: "127.0.0.1".into(),
+        allowed_cidrs: Vec::new(),
+        denied_cidrs: Vec::new(),
+        allowed_ports: vec![18101, 18102],
+        allow_open_bind: true,
+        allow_loopback: true,
+    })
+    .await;
+
+    let a = http_status_from_local(port, 18101).await;
+    assert_eq!(a.status, 200, "port A should be allowed: {}", a.body);
+    assert!(a.body.contains("\"allowedPorts\""));
+
+    let b = http_status_from_local(port, 18102).await;
+    assert_eq!(b.status, 200, "port B should be allowed: {}", b.body);
+
+    let c = http_status_from_local(port, 18103).await;
+    assert_eq!(c.status, 403, "port C should be denied: {}", c.body);
+}
+
+#[tokio::test]
+async fn deny_cidr_blocks_loopback_when_listed() {
+    let port = 18757;
+    start_relay_with(RelayConfig {
+        port,
+        host_token: "deny-loopback-token".into(),
+        bind: "127.0.0.1".into(),
+        allowed_cidrs: Vec::new(),
+        denied_cidrs: vec!["127.0.0.0/8".into()],
+        allowed_ports: Vec::new(),
+        allow_open_bind: true,
+        allow_loopback: true,
+    })
+    .await;
+
+    let res = http_status(port).await;
+    assert_eq!(res.status, 403, "deny CIDR should win: {}", res.body);
+    assert!(res.body.contains("denylist") || res.body.contains("forbidden"));
 }

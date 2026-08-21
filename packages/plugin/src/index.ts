@@ -657,6 +657,8 @@ export default async function chorusPlugin(input: PluginInput) {
             relay.setNetworkOptions({
               bind,
               allowedCidrs: config.relay.allowedCidrs,
+              deniedCidrs: config.relay.deniedCidrs,
+              allowedPorts: config.relay.allowedPorts,
               allowOpenBind: config.relay.allowOpenBind,
               allowLoopback: config.relay.allowLoopback,
             });
@@ -666,11 +668,21 @@ export default async function chorusPlugin(input: PluginInput) {
               ? `attached to external relay ${relay.getHost()}:${relay.getPort()}`
               : `chorus relay started on ${relay.getBind()}:${relay.getPort()}`;
             say(sid, where);
+            const netBits: string[] = [];
             if (config.relay.allowedCidrs.length > 0) {
+              netBits.push(`allow ${config.relay.allowedCidrs.join(", ")}`);
+            }
+            if (config.relay.deniedCidrs.length > 0) {
+              netBits.push(`deny ${config.relay.deniedCidrs.join(", ")}`);
+            }
+            if (config.relay.allowedPorts.length > 0) {
+              netBits.push(`ports ${config.relay.allowedPorts.join(", ")}`);
+            }
+            if (netBits.length > 0) {
               say(
                 sid,
-                `Network allowlist: ${config.relay.allowedCidrs.join(", ")}` +
-                  (config.relay.allowLoopback ? " (+ loopback)" : "")
+                `Network policy: ${netBits.join("; ")}` +
+                  (config.relay.allowLoopback ? " (+ loopback IP)" : "")
               );
             }
           }
