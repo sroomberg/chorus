@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Network access restrictions
+
+- **CIDR / IP allowlist** on `chorus-relay` (`--allow-cidr` / `relay.allowedCidrs` / `CHORUS_ALLOWED_CIDRS`) — peers outside the list get HTTP 403 before auth
+- **Bind policy** — `relay.bind` / `CHORUS_BIND`; `relay.allowOpenBind: false` refuses `0.0.0.0` / `::`
+- Loopback remains admitted by default when an allowlist is set (`allowLoopback`) so the host plugin can reach `/host`
+- Docs: [docs/NETWORK.md](docs/NETWORK.md) (VPN, Tailscale, AWS VPC, Azure VNet, GCP VPC)
+
 ## v1.0.0 — 2026-08-20
 
 First stable release of Chorus: **OpenCode↔OpenCode pair programming on one live AI session**. The host shares a session; collaborators join over a LAN WebSocket relay and send prompts into the same LLM turn. Side-channel chat stays in toasts; the shared transcript is mirrored into each joiner’s OpenCode session.

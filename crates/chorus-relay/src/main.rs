@@ -16,6 +16,19 @@ struct Args {
     /// Shared secret for the host control channel. Generated if omitted.
     #[arg(long, env = "CHORUS_HOST_TOKEN")]
     host_token: Option<String>,
+
+    /// CIDR or IP allowlist (repeat or comma-separated). Empty = no IP restriction.
+    /// Example: --allow-cidr 10.0.0.0/8 --allow-cidr 100.64.0.0/10
+    #[arg(long = "allow-cidr", env = "CHORUS_ALLOWED_CIDRS", value_delimiter = ',')]
+    allowed_cidrs: Vec<String>,
+
+    /// Allow binding to 0.0.0.0 / :: (open all interfaces). Disable for enterprise.
+    #[arg(long, env = "CHORUS_ALLOW_OPEN_BIND", default_value_t = true, action = clap::ArgAction::Set)]
+    allow_open_bind: bool,
+
+    /// When an allowlist is set, still admit loopback (host plugin on same machine).
+    #[arg(long, env = "CHORUS_ALLOW_LOOPBACK", default_value_t = true, action = clap::ArgAction::Set)]
+    allow_loopback: bool,
 }
 
 fn random_hex(bytes: usize) -> String {
@@ -44,6 +57,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         port: args.port,
         host_token,
         bind: args.bind,
+        allowed_cidrs: args.allowed_cidrs,
+        allow_open_bind: args.allow_open_bind,
+        allow_loopback: args.allow_loopback,
     })
     .await
 }

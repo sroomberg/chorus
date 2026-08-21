@@ -19,6 +19,9 @@ async fn start_relay(port: u16, host_token: &str) {
             port,
             host_token: token,
             bind: "127.0.0.1".into(),
+            allowed_cidrs: Vec::new(),
+            allow_open_bind: true,
+            allow_loopback: true,
         })
         .await
         .expect("relay failed");
@@ -551,4 +554,131 @@ async fn accepts_custom_remote_format_with_policy_prefix_and_rewrite() {
     .unwrap();
 
     let _ = wait_for_server(&mut ws, |m| matches!(m, ServerMessage::SessionHistory { .. })).await;
+}
+
+async fn start_relay_with(config: RelayConfig) {
+    let port = config.port;
+    tokio::spawn(async move {
+        serve(config).await.expect("relay failed");
+    });
+    for _ in 0..50 {
+        // Status may be forbidden when loopback is denied; TCP accept is enough.
+        if tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .is_ok()
+        {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("relay did not become ready on port {port}");
+}
+
+#[tokio::test]
+async fn allowlist_admits_loopback_by_default() {
+    let port = 18753;
+    let host_token = "allowlist-loopback-token";
+    start_relay_with(RelayConfig {
+        port,
+        host_token: host_token.into(),
+        bind: "127.0.0.1".into(),
+        allowed_cidrs: vec!["10.0.0.0/8".into()],
+        allow_open_bind: true,
+        allow_loopback: true,
+    })
+    .await;
+
+    let res = http_status(port).await;
+    assert_eq!(res.status, 200);
+    assert!(res.body.contains("\"restricted\":true"));
+
+    let mut host = connect_host(port, host_token).await;
+    let token = issue_token(&mut host, UserRole::Edit).await;
+    let (mut ws, _) = connect_async(format!("ws://127.0.0.1:{port}/ws"))
+        .await
+        .unwrap();
+    ws.send(Message::Text(
+        serde_json::to_string(&ClientMessage::Auth {
+            token,
+            display_name: "Local".into(),
+            repo_remote: None,
+            email: None,
+        })
+        .unwrap()
+        .into(),
+    ))
+    .await
+    .unwrap();
+    let _ = wait_for_server(&mut ws, |m| matches!(m, ServerMessage::SessionHistory { .. })).await;
+}
+
+#[tokio::test]
+async fn allowlist_rejects_loopback_when_disabled() {
+    let port = 18754;
+    let host_token = "allowlist-deny-loopback-token";
+    start_relay_with(RelayConfig {
+        port,
+        host_token: host_token.into(),
+        bind: "127.0.0.1".into(),
+        allowed_cidrs: vec!["10.0.0.0/8".into()],
+        allow_open_bind: true,
+        allow_loopback: false,
+    })
+    .await;
+
+    let res = http_status(port).await;
+    assert_eq!(res.status, 403);
+    assert!(res.body.contains("NETWORK_ACCESS_DENIED") || res.body.contains("forbidden"));
+
+    let connect = connect_async(format!("ws://127.0.0.1:{port}/ws")).await;
+    assert!(
+        connect.is_err(),
+        "websocket upgrade should fail when peer is not allowlisted"
+    );
+}
+
+#[tokio::test]
+async fn refuse_open_bind_when_disabled() {
+    let err = serve(RelayConfig {
+        port: 18755,
+        host_token: "x".into(),
+        bind: "0.0.0.0".into(),
+        allowed_cidrs: Vec::new(),
+        allow_open_bind: false,
+        allow_loopback: true,
+    })
+    .await
+    .expect_err("should refuse open bind");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("refusing open bind") || msg.contains("0.0.0.0"),
+        "unexpected error: {msg}"
+    );
+}
+
+struct HttpStatus {
+    status: u16,
+    body: String,
+}
+
+async fn http_status(port: u16) -> HttpStatus {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .expect("tcp");
+    let req = format!("GET /status HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+    stream.write_all(req.as_bytes()).await.unwrap();
+    let mut buf = Vec::new();
+    stream.read_to_end(&mut buf).await.unwrap();
+    let text = String::from_utf8_lossy(&buf);
+    let status = text
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    HttpStatus {
+        status,
+        body: text.into_owned(),
+    }
 }

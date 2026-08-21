@@ -53,6 +53,7 @@ Enterprise gap analysis (what would actually pass a security review vs what ship
 - Git origin binding when the host share directory has a remote (joiner must present matching remote)
 - `chorus-kick` for active joiners
 - Layered `chorus.json` config (org/user/project) for security + relay + backup defaults, with enterprise locks (user/project can still override system; email/repo remain claims — [docs/ENTERPRISE.md](./ENTERPRISE.md))
+- **Network allowlist** — `relay.allowedCidrs`, `relay.bind`, `relay.allowOpenBind` / `allowLoopback` (VPN/VPC patterns in [docs/NETWORK.md](./NETWORK.md))
 
 ### P1 — reliability
 

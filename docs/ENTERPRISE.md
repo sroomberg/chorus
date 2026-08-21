@@ -34,6 +34,7 @@ System / MDM config must be able to set a **minimum** that user and project file
 
 - `requireApproval`, `allowSkipApproval`, `requireRepoMatch`, `requireEmailDomainMatch`, `allowedEmailDomain`, `defaultRole`, `tokenTtlMs`
 - Optional: forbid `admin` join tokens, forbid backup, forbid advertising a non-loopback `publicHost`
+- Network: `allowOpenBind: false`, non-empty `allowedCidrs` (see [NETWORK.md](./NETWORK.md))
 
 Users should still be allowed to **tighten** (force approval even if org default is off). Today they can also loosen.
 
@@ -104,7 +105,7 @@ Not always a hard block, but they show up on every questionnaire.
 | Feature | Why |
 |---|---|
 | **Proven repo ACL** | GitHub/GitLab “is this user a collaborator on `origin`?” or a signed capability from the host clone — STATUS.md #11 |
-| **Network allowlist** | Only listed CIDRs / tailnet peers can hit the relay; refuse `0.0.0.0` unless org allows LAN bind |
+| **Network allowlist** | CIDR allowlist + refuse open bind on the relay; still pair with VPC/SG/VPN — [NETWORK.md](./NETWORK.md) |
 | **Signed relay binaries + SBOM** | Supply-chain review of `chorus-relay`; pinned plugin version |
 | **Apache-2.0 or explicit patent grant** | MIT is often acceptable; some legal teams still stall — see [DECISIONS.md](./DECISIONS.md) |
 | **Admin role split** | Joiner `admin` can kick/promote/close from the `/ws` client protocol. Host-only moderation is easier to explain |
@@ -123,7 +124,7 @@ Skip these until the blockers above exist:
 ## Suggested order
 
 1. **Policy floor** + **default `view`** + **token TTL and revoke-on-stop** — makes the locks you already document real, cuts blast radius, no IdP required.
-2. **Audit JSON** + **backup encryption / no-backup lock** + **localhost or TLS bind** — answers IR and data-handling questions.
+2. **Audit JSON** + **backup encryption / no-backup lock** + **TLS** — answers IR and data-handling questions. Network allowlist / private bind is available now ([NETWORK.md](./NETWORK.md)).
 3. **OIDC** + **GitHub/GitLab collaborator check** — turns email/repo from claims into proofs.
 4. **Joiner tool allowlist** + **tunnel with TLS** — only then is remote pair programming an enterprise feature.
 
