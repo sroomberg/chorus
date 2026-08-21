@@ -9,6 +9,20 @@ export type RelayServerOptions = {
      * When true, requires hostToken and does not spawn/kill a subprocess.
      */
     external?: boolean;
+    /** Bind address passed to chorus-relay (default 0.0.0.0). */
+    bind?: string;
+    /** CIDR/IP allowlist for TCP peers. */
+    allowedCidrs?: string[];
+    /** Refuse 0.0.0.0 / :: bind when false. */
+    allowOpenBind?: boolean;
+    /** Admit loopback even when allowlist is set (default true). */
+    allowLoopback?: boolean;
+};
+export type RelayNetworkOptions = {
+    bind?: string;
+    allowedCidrs?: string[];
+    allowOpenBind?: boolean;
+    allowLoopback?: boolean;
 };
 /**
  * Resolve relay connection settings from env.
@@ -35,6 +49,10 @@ export declare class RelayServer {
     private clients;
     private readonly host;
     private readonly external;
+    private bind;
+    private allowedCidrs;
+    private allowOpenBind;
+    private allowLoopback;
     private pendingToken;
     private onInjectInput?;
     private onChatMessage?;
@@ -43,6 +61,8 @@ export declare class RelayServer {
     private onUserJoined?;
     private onUserLeft?;
     constructor(port: number, opts?: RelayServerOptions);
+    /** Apply network policy before start() (from project/org chorus.json). */
+    setNetworkOptions(opts: RelayNetworkOptions): void;
     setInputHandler(fn: (content: string, userId: string, displayName?: string) => Promise<void>): void;
     setChatHandler(fn: (displayName: string | undefined, content: string) => void): void;
     setTypingHandler(fn: (displayName: string | undefined) => void): void;
@@ -78,6 +98,8 @@ export declare class RelayServer {
     get clientCount(): number;
     getPort(): number;
     getHost(): string;
+    getBind(): string;
+    getAllowedCidrs(): string[];
     isExternal(): boolean;
 }
 //# sourceMappingURL=index.d.ts.map

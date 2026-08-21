@@ -65,6 +65,10 @@ export class RelayServer {
     clients = 0;
     host;
     external;
+    bind;
+    allowedCidrs;
+    allowOpenBind;
+    allowLoopback;
     pendingToken = null;
     onInjectInput;
     onChatMessage;
@@ -77,6 +81,21 @@ export class RelayServer {
         this.host = opts.host ?? "127.0.0.1";
         this.external = Boolean(opts.external);
         this.hostToken = opts.hostToken ?? "";
+        this.bind = opts.bind ?? "0.0.0.0";
+        this.allowedCidrs = opts.allowedCidrs ? [...opts.allowedCidrs] : [];
+        this.allowOpenBind = opts.allowOpenBind ?? true;
+        this.allowLoopback = opts.allowLoopback ?? true;
+    }
+    /** Apply network policy before start() (from project/org chorus.json). */
+    setNetworkOptions(opts) {
+        if (opts.bind !== undefined)
+            this.bind = opts.bind;
+        if (opts.allowedCidrs !== undefined)
+            this.allowedCidrs = [...opts.allowedCidrs];
+        if (opts.allowOpenBind !== undefined)
+            this.allowOpenBind = opts.allowOpenBind;
+        if (opts.allowLoopback !== undefined)
+            this.allowLoopback = opts.allowLoopback;
     }
     setInputHandler(fn) {
         this.onInjectInput = fn;
@@ -110,7 +129,22 @@ export class RelayServer {
         }
         this.hostToken = this.hostToken || randomBytes(32).toString("hex");
         const bin = resolveRelayBin();
-        this.child = spawn(bin, ["--port", String(this.port), "--bind", "0.0.0.0", "--host-token", this.hostToken], {
+        const args = [
+            "--port",
+            String(this.port),
+            "--bind",
+            this.bind,
+            "--host-token",
+            this.hostToken,
+            "--allow-open-bind",
+            this.allowOpenBind ? "true" : "false",
+            "--allow-loopback",
+            this.allowLoopback ? "true" : "false",
+        ];
+        for (const cidr of this.allowedCidrs) {
+            args.push("--allow-cidr", cidr);
+        }
+        this.child = spawn(bin, args, {
             stdio: ["ignore", "ignore", "pipe"],
             env: { ...process.env },
         });
@@ -335,6 +369,12 @@ export class RelayServer {
     }
     getHost() {
         return this.host;
+    }
+    getBind() {
+        return this.bind;
+    }
+    getAllowedCidrs() {
+        return [...this.allowedCidrs];
     }
     isExternal() {
         return this.external;

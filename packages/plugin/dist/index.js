@@ -504,12 +504,30 @@ export default async function chorusPlugin(input) {
                     }
                     if (!sharing) {
                         pendingQueue.clear();
+                        const bind = config.relay.bind ?? "0.0.0.0";
+                        if (config.relay.allowOpenBind === false && (bind === "0.0.0.0" || bind === "::" || bind === "[::]")) {
+                            return JSON.stringify({
+                                shared: false,
+                                error: "relay.allowOpenBind is false but relay.bind is open (0.0.0.0 / ::). " +
+                                    "Set relay.bind to a private address (or 127.0.0.1) in chorus.json.",
+                            });
+                        }
+                        relay.setNetworkOptions({
+                            bind,
+                            allowedCidrs: config.relay.allowedCidrs,
+                            allowOpenBind: config.relay.allowOpenBind,
+                            allowLoopback: config.relay.allowLoopback,
+                        });
                         await relay.start();
                         sharing = true;
                         const where = relay.isExternal()
                             ? `attached to external relay ${relay.getHost()}:${relay.getPort()}`
-                            : `chorus relay started on port ${relay.getPort()}`;
+                            : `chorus relay started on ${relay.getBind()}:${relay.getPort()}`;
                         say(sid, where);
+                        if (config.relay.allowedCidrs.length > 0) {
+                            say(sid, `Network allowlist: ${config.relay.allowedCidrs.join(", ")}` +
+                                (config.relay.allowLoopback ? " (+ loopback)" : ""));
+                        }
                     }
                     const repoRemote = detectRepoRemote(context.directory);
                     if (config.security.requireRepoMatch && !repoRemote) {

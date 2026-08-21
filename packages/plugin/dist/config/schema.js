@@ -60,11 +60,38 @@ export const chorusSecurityConfigSchema = z
     tokenTtlMs: z.number().int().positive().optional(),
 })
     .strict();
+const relayDefaults = {
+    allowedCidrs: [],
+    allowOpenBind: true,
+    allowLoopback: true,
+};
 export const chorusRelayConfigSchema = z
     .object({
     port: z.number().int().min(1).max(65535).optional(),
     /** Host:port advertised in join URLs (overrides LAN detection). */
     publicHost: z.string().min(1).optional(),
+    /**
+     * Bind address for chorus-relay (default 0.0.0.0 for LAN).
+     * Prefer a private interface or 127.0.0.1 when only local/VPN peers should reach it.
+     */
+    bind: z.string().min(1).optional(),
+    /**
+     * CIDR or IP allowlist for TCP peers. Empty = unrestricted (current default).
+     * When set, only matching peers may hit /ws, /host, /status (loopback still
+     * admitted unless allowLoopback is false).
+     * Examples: ["10.0.0.0/8", "100.64.0.0/10"] for VPC + Tailscale.
+     */
+    allowedCidrs: z.array(z.string().min(1).max(64)).max(64).default(relayDefaults.allowedCidrs),
+    /**
+     * When false, refuse bind to 0.0.0.0 / :: so the relay cannot listen on all
+     * interfaces. Use with MDM /etc/chorus/config.json for enterprise.
+     */
+    allowOpenBind: z.boolean().default(relayDefaults.allowOpenBind),
+    /**
+     * When allowedCidrs is non-empty, still admit 127.0.0.0/8 and ::1 so the
+     * host plugin on the same machine can use /host.
+     */
+    allowLoopback: z.boolean().default(relayDefaults.allowLoopback),
 })
     .strict();
 export const chorusBackupConfigSchema = z
@@ -92,7 +119,7 @@ export const chorusOrgConfigSchema = z
 export const chorusConfigSchema = z
     .object({
     security: chorusSecurityConfigSchema.default(securityDefaults),
-    relay: chorusRelayConfigSchema.default({}),
+    relay: chorusRelayConfigSchema.default(relayDefaults),
     backup: chorusBackupConfigSchema.default({}),
     org: chorusOrgConfigSchema.default({}),
 })
