@@ -1,6 +1,6 @@
 # Chorus status — what still needs to happen
 
-Snapshot as of 2026-08-03 (post `v0.1.6`). Tests/typecheck/build are green (33 tests).
+Snapshot as of 2026-08-21 (toward `v2.0.0` network lockdown). Tests/typecheck/build are green.
 
 ## Current state
 

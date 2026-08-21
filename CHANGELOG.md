@@ -2,12 +2,46 @@
 
 ## Unreleased
 
+## v2.0.0 — 2026-08-21
+
+Enterprise network lockdown for Chorus: keep the relay off the open internet with CIDR allowlists, private bind, and VPN/VPC deployment docs.
+
+GitHub tag `v2.0.0` is the source of truth for this release. `@chorus/plugin` remains install-from-git (packages are private). Rebuild `chorus-relay` from this tag — older binaries ignore the new flags.
+
 ### Network access restrictions
 
-- **CIDR / IP allowlist** on `chorus-relay` (`--allow-cidr` / `relay.allowedCidrs` / `CHORUS_ALLOWED_CIDRS`) — peers outside the list get HTTP 403 before auth
+- **CIDR / IP allowlist** on `chorus-relay` (`--allow-cidr` / `relay.allowedCidrs` / `CHORUS_ALLOWED_CIDRS`) — peers outside the list get HTTP 403 before auth on `/ws`, `/host`, and `/status`
 - **Bind policy** — `relay.bind` / `CHORUS_BIND`; `relay.allowOpenBind: false` refuses `0.0.0.0` / `::`
 - Loopback remains admitted by default when an allowlist is set (`allowLoopback`) so the host plugin can reach `/host`
-- Docs: [docs/NETWORK.md](docs/NETWORK.md) (VPN, Tailscale, AWS VPC, Azure VNet, GCP VPC)
+- `/status` reports `{ network: { allowlist, restricted } }`
+- Docs: [docs/NETWORK.md](docs/NETWORK.md) (corporate VPN, Tailscale, AWS VPC, Azure VNet, GCP VPC)
+
+### Config & env (new)
+
+| Control | Default | Notes |
+|---|---|---|
+| `relay.bind` / `CHORUS_BIND` | `0.0.0.0` | Listen address |
+| `relay.allowedCidrs` / `CHORUS_ALLOWED_CIDRS` | `[]` | Empty = unrestricted |
+| `relay.allowOpenBind` / `CHORUS_ALLOW_OPEN_BIND` | `true` | Set `false` for enterprise MDM |
+| `relay.allowLoopback` / `CHORUS_ALLOW_LOOPBACK` | `true` | Admit loopback when allowlisted |
+
+### Upgrade notes
+
+- Defaults are unchanged: LAN shares without an allowlist behave like v1.0.0.
+- Hosts must run a `chorus-relay` built from this release (or later) for allowlist/bind flags to take effect.
+- If `allowOpenBind` is `false` and `bind` is still open (`0.0.0.0` / `::`), `/chorus-share` fails with a clear error — set a private `bind` address.
+
+Example enterprise floor:
+
+```json
+{
+  "relay": {
+    "allowOpenBind": false,
+    "bind": "10.0.12.4",
+    "allowedCidrs": ["10.0.0.0/8", "100.64.0.0/10"]
+  }
+}
+```
 
 ## v1.0.0 — 2026-08-20
 
