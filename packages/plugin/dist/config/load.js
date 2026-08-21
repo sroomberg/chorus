@@ -106,6 +106,20 @@ function applyEnvOverrides(config) {
             .filter(Boolean);
         applied = true;
     }
+    if (process.env["CHORUS_DENIED_CIDRS"]) {
+        next.relay.deniedCidrs = process.env["CHORUS_DENIED_CIDRS"]
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+        applied = true;
+    }
+    if (process.env["CHORUS_ALLOWED_PORTS"]) {
+        next.relay.allowedPorts = process.env["CHORUS_ALLOWED_PORTS"]
+            .split(",")
+            .map((s) => parseInt(s.trim(), 10))
+            .filter((n) => Number.isFinite(n) && n >= 1 && n <= 65535);
+        applied = true;
+    }
     if (process.env["CHORUS_ALLOW_OPEN_BIND"] !== undefined) {
         next.relay.allowOpenBind = parseEnvBool(process.env["CHORUS_ALLOW_OPEN_BIND"], true);
         applied = true;

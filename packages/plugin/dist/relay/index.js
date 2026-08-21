@@ -67,6 +67,8 @@ export class RelayServer {
     external;
     bind;
     allowedCidrs;
+    deniedCidrs;
+    allowedPorts;
     allowOpenBind;
     allowLoopback;
     pendingToken = null;
@@ -83,6 +85,8 @@ export class RelayServer {
         this.hostToken = opts.hostToken ?? "";
         this.bind = opts.bind ?? "0.0.0.0";
         this.allowedCidrs = opts.allowedCidrs ? [...opts.allowedCidrs] : [];
+        this.deniedCidrs = opts.deniedCidrs ? [...opts.deniedCidrs] : [];
+        this.allowedPorts = opts.allowedPorts ? [...opts.allowedPorts] : [];
         this.allowOpenBind = opts.allowOpenBind ?? true;
         this.allowLoopback = opts.allowLoopback ?? true;
     }
@@ -92,6 +96,10 @@ export class RelayServer {
             this.bind = opts.bind;
         if (opts.allowedCidrs !== undefined)
             this.allowedCidrs = [...opts.allowedCidrs];
+        if (opts.deniedCidrs !== undefined)
+            this.deniedCidrs = [...opts.deniedCidrs];
+        if (opts.allowedPorts !== undefined)
+            this.allowedPorts = [...opts.allowedPorts];
         if (opts.allowOpenBind !== undefined)
             this.allowOpenBind = opts.allowOpenBind;
         if (opts.allowLoopback !== undefined)
@@ -143,6 +151,12 @@ export class RelayServer {
         ];
         for (const cidr of this.allowedCidrs) {
             args.push("--allow-cidr", cidr);
+        }
+        for (const cidr of this.deniedCidrs) {
+            args.push("--deny-cidr", cidr);
+        }
+        for (const port of this.allowedPorts) {
+            args.push("--allow-port", String(port));
         }
         this.child = spawn(bin, args, {
             stdio: ["ignore", "ignore", "pipe"],

@@ -62,6 +62,8 @@ export const chorusSecurityConfigSchema = z
     .strict();
 const relayDefaults = {
     allowedCidrs: [],
+    deniedCidrs: [],
+    allowedPorts: [],
     allowOpenBind: true,
     allowLoopback: true,
 };
@@ -76,12 +78,23 @@ export const chorusRelayConfigSchema = z
      */
     bind: z.string().min(1).optional(),
     /**
-     * CIDR or IP allowlist for TCP peers. Empty = unrestricted (current default).
-     * When set, only matching peers may hit /ws, /host, /status (loopback still
-     * admitted unless allowLoopback is false).
+     * CIDR or IP allowlist for TCP peers. Empty = no IP allow restriction.
      * Examples: ["10.0.0.0/8", "100.64.0.0/10"] for VPC + Tailscale.
      */
     allowedCidrs: z.array(z.string().min(1).max(64)).max(64).default(relayDefaults.allowedCidrs),
+    /**
+     * Explicit deny CIDRs — evaluated before allow (deny wins).
+     * Example: ["203.0.113.0/24"] to block a guest / untrusted range.
+     */
+    deniedCidrs: z.array(z.string().min(1).max(64)).max(64).default(relayDefaults.deniedCidrs),
+    /**
+     * Peer **source port** allowlist. Empty = any source port.
+     * For single-machine e2e: pin clients to fixed local ports and list them here.
+     */
+    allowedPorts: z
+        .array(z.number().int().min(1).max(65535))
+        .max(256)
+        .default(relayDefaults.allowedPorts),
     /**
      * When false, refuse bind to 0.0.0.0 / :: so the relay cannot listen on all
      * interfaces. Use with MDM /etc/chorus/config.json for enterprise.
@@ -89,7 +102,8 @@ export const chorusRelayConfigSchema = z
     allowOpenBind: z.boolean().default(relayDefaults.allowOpenBind),
     /**
      * When allowedCidrs is non-empty, still admit 127.0.0.0/8 and ::1 so the
-     * host plugin on the same machine can use /host.
+     * host plugin on the same machine can use /host. Source-port allowlists
+     * still apply to loopback peers.
      */
     allowLoopback: z.boolean().default(relayDefaults.allowLoopback),
 })

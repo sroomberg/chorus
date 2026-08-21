@@ -28,6 +28,8 @@ export declare const chorusRelayConfigSchema: z.ZodObject<{
     publicHost: z.ZodOptional<z.ZodString>;
     bind: z.ZodOptional<z.ZodString>;
     allowedCidrs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    deniedCidrs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    allowedPorts: z.ZodDefault<z.ZodArray<z.ZodNumber>>;
     allowOpenBind: z.ZodDefault<z.ZodBoolean>;
     allowLoopback: z.ZodDefault<z.ZodBoolean>;
 }, z.core.$strict>;
@@ -71,6 +73,8 @@ export declare const chorusConfigSchema: z.ZodObject<{
         publicHost: z.ZodOptional<z.ZodString>;
         bind: z.ZodOptional<z.ZodString>;
         allowedCidrs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        deniedCidrs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        allowedPorts: z.ZodDefault<z.ZodArray<z.ZodNumber>>;
         allowOpenBind: z.ZodDefault<z.ZodBoolean>;
         allowLoopback: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strict>>;
