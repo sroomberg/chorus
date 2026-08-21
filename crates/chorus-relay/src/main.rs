@@ -16,6 +16,28 @@ struct Args {
     /// Shared secret for the host control channel. Generated if omitted.
     #[arg(long, env = "CHORUS_HOST_TOKEN")]
     host_token: Option<String>,
+
+    /// CIDR or IP allowlist (repeat or comma-separated). Empty = no IP allow restriction.
+    #[arg(long = "allow-cidr", env = "CHORUS_ALLOWED_CIDRS", value_delimiter = ',')]
+    allowed_cidrs: Vec<String>,
+
+    /// CIDR or IP denylist (repeat or comma-separated). Deny wins over allow.
+    #[arg(long = "deny-cidr", env = "CHORUS_DENIED_CIDRS", value_delimiter = ',')]
+    denied_cidrs: Vec<String>,
+
+    /// Peer source-port allowlist (repeat or comma-separated). Empty = any source port.
+    /// Useful for single-machine e2e where all peers are 127.0.0.1.
+    #[arg(long = "allow-port", env = "CHORUS_ALLOWED_PORTS", value_delimiter = ',')]
+    allowed_ports: Vec<u16>,
+
+    /// Allow binding to 0.0.0.0 / :: (open all interfaces). Disable for enterprise.
+    #[arg(long, env = "CHORUS_ALLOW_OPEN_BIND", default_value_t = true, action = clap::ArgAction::Set)]
+    allow_open_bind: bool,
+
+    /// When an allowlist is set, still admit loopback IPs (host plugin on same machine).
+    /// Source-port allowlists still apply to loopback peers.
+    #[arg(long, env = "CHORUS_ALLOW_LOOPBACK", default_value_t = true, action = clap::ArgAction::Set)]
+    allow_loopback: bool,
 }
 
 fn random_hex(bytes: usize) -> String {
@@ -44,6 +66,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         port: args.port,
         host_token,
         bind: args.bind,
+        allowed_cidrs: args.allowed_cidrs,
+        denied_cidrs: args.denied_cidrs,
+        allowed_ports: args.allowed_ports,
+        allow_open_bind: args.allow_open_bind,
+        allow_loopback: args.allow_loopback,
     })
     .await
 }

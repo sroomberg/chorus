@@ -1,4 +1,5 @@
 use crate::access::AccessManager;
+use crate::netallow::{is_open_bind, NetworkPolicy, NetworkPolicyConfig};
 use crate::protocol::{
     email_matches_domain, normalize_display_name, normalize_email, sanitize_repo_remote_prefixes,
     sanitize_repo_remote_rewrites, ChatMessage, ClientMessage, HostToRelay, RelayToHost,
@@ -6,7 +7,8 @@ use crate::protocol::{
 };
 use crate::state::{ClientTx, HostTx, RelayState, SharedState};
 use axum::extract::ws::{Message, WebSocket};
-use axum::extract::{State, WebSocketUpgrade};
+use axum::extract::{ConnectInfo, State, WebSocketUpgrade};
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
@@ -35,18 +37,76 @@ fn random_hex(bytes: usize) -> String {
 pub struct AppState {
     pub relay: SharedState,
     pub host_token: Arc<String>,
+    pub network: Arc<NetworkPolicy>,
 }
 
 pub struct RelayConfig {
     pub port: u16,
     pub host_token: String,
     pub bind: String,
+    /// When non-empty, only these CIDRs (plus loopback if enabled) may connect.
+    pub allowed_cidrs: Vec<String>,
+    /// Explicit deny CIDRs — evaluated before allow (deny wins).
+    pub denied_cidrs: Vec<String>,
+    /// When non-empty, only these peer **source ports** may connect (single-machine e2e).
+    pub allowed_ports: Vec<u16>,
+    /// When false, refuse bind to 0.0.0.0 / :: (enterprise default for MDM).
+    pub allow_open_bind: bool,
+    /// When allowlist is set, still admit 127.0.0.0/8 and ::1 (host plugin).
+    pub allow_loopback: bool,
+}
+
+impl Default for RelayConfig {
+    fn default() -> Self {
+        Self {
+            port: 7742,
+            host_token: String::new(),
+            bind: "0.0.0.0".into(),
+            allowed_cidrs: Vec::new(),
+            denied_cidrs: Vec::new(),
+            allowed_ports: Vec::new(),
+            allow_open_bind: true,
+            allow_loopback: true,
+        }
+    }
+}
+
+fn peer_allowed(state: &AppState, peer: SocketAddr) -> bool {
+    state.network.allows_socket(peer)
 }
 
 pub async fn serve(config: RelayConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if !config.allow_open_bind && is_open_bind(&config.bind) {
+        return Err(format!(
+            "refusing open bind {} (set --bind to a private address or enable --allow-open-bind)",
+            config.bind
+        )
+        .into());
+    }
+
+    let network = NetworkPolicy::parse(NetworkPolicyConfig {
+        allowed_cidrs: config.allowed_cidrs,
+        denied_cidrs: config.denied_cidrs,
+        allowed_ports: config.allowed_ports,
+        allow_loopback: config.allow_loopback,
+    })?;
+    if network.is_restricted() {
+        let allow: Vec<String> = network.allowed_cidrs().collect();
+        let deny: Vec<String> = network.denied_cidrs().collect();
+        let ports: Vec<String> = network.allowed_ports().map(|p| p.to_string()).collect();
+        tracing::info!(
+            "network policy enabled (loopback={}): allow=[{}] deny=[{}] ports=[{}]",
+            config.allow_loopback,
+            allow.join(", "),
+            deny.join(", "),
+            ports.join(", ")
+        );
+    }
+
     let state = AppState {
         relay: Arc::new(RwLock::new(RelayState::new(config.port))),
         host_token: Arc::new(config.host_token),
+        network: Arc::new(network),
     };
 
     let app = Router::new()
@@ -60,28 +120,97 @@ pub async fn serve(config: RelayConfig) -> Result<(), Box<dyn std::error::Error 
     let addr: SocketAddr = format!("{}:{}", config.bind, config.port).parse()?;
     tracing::info!("chorus-relay listening on {addr}");
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 
-async fn root() -> &'static str {
-    "chorus relay — OpenCode only"
+async fn root(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !peer_allowed(&state, peer) {
+        return (
+            StatusCode::FORBIDDEN,
+            "chorus relay — peer not on network allowlist",
+        )
+            .into_response();
+    }
+    "chorus relay — OpenCode only".into_response()
 }
 
-async fn status(State(state): State<AppState>) -> impl IntoResponse {
+async fn status(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !peer_allowed(&state, peer) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "status": "forbidden",
+                "error": "peer not on network allowlist",
+            })),
+        )
+            .into_response();
+    }
     let guard = state.relay.read().await;
+    let allow: Vec<String> = state.network.allowed_cidrs().collect();
+    let deny: Vec<String> = state.network.denied_cidrs().collect();
+    let ports: Vec<u16> = state.network.allowed_ports().collect();
     Json(serde_json::json!({
         "status": "ok",
         "clients": guard.client_count(),
+        "network": {
+            "allowlist": allow,
+            "denylist": deny,
+            "allowedPorts": ports,
+            "restricted": state.network.is_restricted(),
+        },
     }))
+    .into_response()
 }
 
-async fn ws_joiner(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+async fn ws_joiner(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !peer_allowed(&state, peer) {
+        tracing::warn!(%peer, "rejected /ws: not on network allowlist");
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "NETWORK_ACCESS_DENIED",
+                "message": "Peer address is not on the relay network allowlist",
+            })),
+        )
+            .into_response();
+    }
     ws.on_upgrade(move |socket| handle_joiner(socket, state.relay))
+        .into_response()
 }
 
-async fn ws_host(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+async fn ws_host(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !peer_allowed(&state, peer) {
+        tracing::warn!(%peer, "rejected /host: not on network allowlist");
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "NETWORK_ACCESS_DENIED",
+                "message": "Peer address is not on the relay network allowlist",
+            })),
+        )
+            .into_response();
+    }
     ws.on_upgrade(move |socket| handle_host(socket, state.relay, state.host_token))
+        .into_response()
 }
 
 fn admit_active(guard: &mut RelayState, uid: &str, user: &crate::protocol::ConnectedUser, tx: &ClientTx) {

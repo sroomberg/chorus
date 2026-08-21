@@ -26,6 +26,12 @@ export declare const chorusSecurityConfigSchema: z.ZodObject<{
 export declare const chorusRelayConfigSchema: z.ZodObject<{
     port: z.ZodOptional<z.ZodNumber>;
     publicHost: z.ZodOptional<z.ZodString>;
+    bind: z.ZodOptional<z.ZodString>;
+    allowedCidrs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    deniedCidrs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    allowedPorts: z.ZodDefault<z.ZodArray<z.ZodNumber>>;
+    allowOpenBind: z.ZodDefault<z.ZodBoolean>;
+    allowLoopback: z.ZodDefault<z.ZodBoolean>;
 }, z.core.$strict>;
 export declare const chorusBackupConfigSchema: z.ZodObject<{
     bucket: z.ZodOptional<z.ZodString>;
@@ -65,6 +71,12 @@ export declare const chorusConfigSchema: z.ZodObject<{
     relay: z.ZodDefault<z.ZodObject<{
         port: z.ZodOptional<z.ZodNumber>;
         publicHost: z.ZodOptional<z.ZodString>;
+        bind: z.ZodOptional<z.ZodString>;
+        allowedCidrs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        deniedCidrs: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        allowedPorts: z.ZodDefault<z.ZodArray<z.ZodNumber>>;
+        allowOpenBind: z.ZodDefault<z.ZodBoolean>;
+        allowLoopback: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strict>>;
     backup: z.ZodDefault<z.ZodObject<{
         bucket: z.ZodOptional<z.ZodString>;

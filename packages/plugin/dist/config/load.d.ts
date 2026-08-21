@@ -21,7 +21,7 @@ export declare function systemConfigPath(): string;
  *   3. user file (`~/.config/chorus/config.json`)
  *   4. project file (`chorus.json` or `.chorus/config.json` under projectDir)
  *   5. explicit CHORUS_CONFIG path
- *   6. selected environment overrides (relay port, public host, backup)
+ *   6. selected environment overrides (relay port/bind/allowlist, public host, backup)
  */
 export declare function loadChorusConfig(projectDir?: string): LoadedChorusConfig;
 /**

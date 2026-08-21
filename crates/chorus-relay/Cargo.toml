@@ -1,6 +1,6 @@
 [package]
 name = "chorus-relay"
-version = "0.2.0"
+version = "2.0.0"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -28,6 +28,8 @@ clap = { version = "4", features = ["derive", "env"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower-http = { version = "0.6", features = ["trace"] }
+ipnet = "2.12.1"
+http = "1.5.0"
 
 [dev-dependencies]
 tokio-tungstenite = "0.26"
