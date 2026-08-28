@@ -1,7 +1,24 @@
 {
   "name": "@chorus/plugin",
   "version": "2.0.0",
+  "description": "OpenCode plugin for collaborative session sharing via chorus-relay.",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sroomberg/chorus.git",
+    "directory": "packages/plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/sroomberg/chorus/issues"
+  },
+  "homepage": "https://github.com/sroomberg/chorus#readme",
+  "keywords": [
+    "opencode",
+    "pair-programming",
+    "collaboration",
+    "plugin"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

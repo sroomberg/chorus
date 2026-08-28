@@ -1,7 +1,24 @@
 {
   "name": "@chorus/shared",
   "version": "0.1.0",
+  "description": "Shared TypeScript types and protocol codecs for Chorus.",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sroomberg/chorus.git",
+    "directory": "packages/shared"
+  },
+  "bugs": {
+    "url": "https://github.com/sroomberg/chorus/issues"
+  },
+  "homepage": "https://github.com/sroomberg/chorus#readme",
+  "keywords": [
+    "opencode",
+    "chorus",
+    "protocol",
+    "websocket"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
