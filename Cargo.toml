@@ -6,3 +6,6 @@ members = ["crates/chorus-relay"]
 edition = "2021"
 license = "MIT"
 authors = ["Steven Roomberg"]
+description = "Collaborative OpenCode session sharing. Pair-program a live AI session from another OpenCode instance in real time."
+repository = "https://github.com/sroomberg/chorus"
+homepage = "https://github.com/sroomberg/chorus"
