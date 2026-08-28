@@ -1,6 +1,25 @@
 {
   "name": "chorus",
+  "description": "Collaborative OpenCode session sharing. Pair-program a live AI session from another OpenCode instance in real time.",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sroomberg/chorus.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sroomberg/chorus/issues"
+  },
+  "homepage": "https://github.com/sroomberg/chorus#readme",
+  "keywords": [
+    "opencode",
+    "pair-programming",
+    "collaboration",
+    "websocket",
+    "ai-coding",
+    "coding-agent",
+    "plugin"
+  ],
   "packageManager": "bun@1.3.14",
   "workspaces": [
     "packages/*"
