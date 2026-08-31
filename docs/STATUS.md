@@ -1,6 +1,6 @@
 # Chorus status — what still needs to happen
 
-Snapshot as of 2026-08-31 (post VS Code adapter rebase onto `v2.0.0`). Tests/typecheck/build are green.
+Snapshot as of 2026-08-31 (`v2.1.0` — VS Code adapter + `@chorus/client`). Tests/typecheck/build are green.
 
 ## Current state
 

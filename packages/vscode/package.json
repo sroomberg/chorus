@@ -2,7 +2,7 @@
   "name": "chorus",
   "displayName": "Chorus",
   "description": "Pair-program a live Chorus AI session from VS Code — share or join over chorus-relay.",
-  "version": "0.1.0",
+  "version": "2.1.0",
   "publisher": "chorus",
   "private": true,
   "license": "MIT",

@@ -2,12 +2,28 @@
 
 ## Unreleased
 
-- VS Code extension (`packages/vscode`) — share/join/chat over the same relay protocol; Session sidebar + commands
-- Extract `@chorus/client` (`JoinClient` + `RelayServer`) shared by OpenCode plugin, VS Code, and future adapters
-- Cross-adapter relay e2e: VS Code host ↔ terminal joiner and terminal host ↔ VS Code joiner (`bun run test:vscode-relay-e2e`)
-- Docs: README, STATUS, VS Code adapter README updated for relay-first cross-adapter model
-- Session access control: host approval, required display names, repo/email/domain gates (`session.policy` / `auth.pending` / `host.approve|deny`)
-- Hybrid OpenCode security e2e, VS Code adapter e2e, and Cloud Agent install script
+## v2.1.0 — 2026-08-31
+
+VS Code adapter and shared client extraction on top of the v2.0.0 relay. The relay remains the core; OpenCode and VS Code are thin adapters on the same `/host` + `/ws` protocol.
+
+GitHub tag `v2.1.0` is the source of truth for this release. `@chorus/plugin` remains install-from-git (packages are private). Rebuild `chorus-relay` from this tag when upgrading from v2.0.0.
+
+### VS Code adapter
+
+- New extension (`packages/vscode`) — share/join/chat, Session sidebar, approve/deny joiners
+- Session access control matches OpenCode: required display name, host approval, optional email/repo gates
+- Cross-adapter relay: VS Code can host for terminal joiners or join a terminal host
+
+### Shared client
+
+- Extract `@chorus/client` (`JoinClient` + `RelayServer`) used by OpenCode plugin and VS Code
+- OpenCode plugin re-exports from `@chorus/client` (includes v2.0.0 network options: CIDR allowlists, async `stop()`)
+
+### Tests & docs
+
+- `bun run test:vscode-e2e` — email gate, pending approve, `collab.input`
+- `bun run test:vscode-relay-e2e` — three-env gate + VS Code ↔ terminal cross-adapter
+- README, STATUS, DECISIONS, and `packages/vscode/README.md` updated
 
 ## v2.0.0 — 2026-08-21
 
