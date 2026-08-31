@@ -5,6 +5,7 @@
 - VS Code extension (`packages/vscode`) — share/join/chat over the same relay protocol; Session sidebar + commands
 - Extract `@chorus/client` (`JoinClient` + `RelayServer`) shared by OpenCode plugin, VS Code, and future adapters
 - Cross-adapter relay e2e: VS Code host ↔ terminal joiner and terminal host ↔ VS Code joiner (`bun run test:vscode-relay-e2e`)
+- Docs: README, STATUS, VS Code adapter README updated for relay-first cross-adapter model
 - Session access control: host approval, required display names, repo/email/domain gates (`session.policy` / `auth.pending` / `host.approve|deny`)
 - Hybrid OpenCode security e2e, VS Code adapter e2e, and Cloud Agent install script
 
