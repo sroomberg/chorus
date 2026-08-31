@@ -1,20 +1,21 @@
 # Chorus status — what still needs to happen
 
-Snapshot as of 2026-08-21 (toward `v2.0.0` network lockdown). Tests/typecheck/build are green.
+Snapshot as of 2026-08-31 (post VS Code adapter rebase onto `v2.0.0`). Tests/typecheck/build are green.
 
 ## Current state
 
-Chorus is an **OpenCode↔OpenCode** LAN collaboration stack:
+Chorus is a **relay-first** LAN collaboration stack with two adapters on one wire protocol:
 
-- Host: `/chorus-share` → spawns Rust `chorus-relay` + issues token via `/host`
-- Joiner: `/chorus-join` → connects to relay `/ws`, forwards prompts into the host session
-- Side channel: `/chorus-chat` + typing toasts
+- **OpenCode** (terminal): `/chorus-share` → spawns Rust `chorus-relay` + issues token via `/host`; `/chorus-join` → `/ws`; full LLM loop + transcript mirror
+- **VS Code** (`packages/vscode`): same `JoinClient` + `RelayServer` via `@chorus/client`; can host relay for terminal joiners or join a terminal host
+- Side channel: `/chorus-chat` + typing toasts (OpenCode); VS Code panel chat
 - Optional S3/R2 backup of user events
+- **v2.0.0 network lockdown**: CIDR allow/deny, bind policy, source-port allowlist ([docs/NETWORK.md](./NETWORK.md))
 
-The browser companion (`packages/web`) was intentionally removed. Joiners now mirror the host transcript into their OpenCode session (`[Host]:` / `[AI]:` lines via `noReply` inject); side-channel chat/typing remain toasts.
+The browser companion (`packages/web`) was intentionally removed. Joiners mirror the host transcript into their OpenCode session (`[Host]:` / `[AI]:` lines via `noReply` inject); side-channel chat/typing remain toasts.
 The in-process Bun relay has been replaced by `crates/chorus-relay`.
 
-**Editor adapters (in progress):** VS Code (`packages/vscode`).
+**Editor adapters:** VS Code shipped in-repo (`packages/vscode`); Zed adapter deferred to a separate branch/PR.
 
 Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`, `opencode-ensemble`, `opencode-relay`): those target **multi-agent / same-DB sync**. Chorus targets **multi-human** pair programming on one live AI session.
 
@@ -66,12 +67,18 @@ Enterprise gap analysis (what would actually pass a security review vs what ship
 
 ### P2 — backup & polish
 
-### P2 — backup & polish
-
 22. Backup AI + chat events; expose restore/list; set `endedAt` on stop.
 23. Drop unused `@aws-sdk/lib-storage` or use it.
 24. Broader tests: roles/view-forbid, kick/close, chat/typing, plugin entry, tunnel.
 25. Native slash-command registration when [opencode#5305](https://github.com/sst/opencode/issues/5305) lands.
+
+### Adapter e2e shipped
+
+- `bun run test:vscode-e2e` — VS Code path: email gate, pending approve, `collab.input`
+- `bun run test:vscode-relay-e2e` — three-env gate (host vscode / joiner vscode / disallowed joiner) + VS Code ↔ terminal cross-adapter
+- `bun run test:adapters-e2e` — both of the above
+- `bun run test:security-e2e` — OpenCode host + protocol joiner (approval flow)
+- `bun run test:network-e2e` — CIDR / source-port allowlist on `chorus-relay`
 
 ## Local multi-agent harness
 
@@ -79,8 +86,9 @@ Enterprise gap analysis (what would actually pass a security review vs what ship
 
 ## Adapter surface (monorepo)
 
-- **OpenCode** (`packages/plugin`) — primary host; full LLM loop + transcript mirror.
-- **VS Code** (`packages/vscode`) — share/join via `@chorus/client`; sidebar transcript; joiner `collab.input` works against an OpenCode host. VS Code share does **not** drive OpenCode’s model — publish host lines manually or pair with OpenCode.
+- **OpenCode** (`packages/plugin`) — primary host; full LLM loop + transcript mirror. Re-exports `@chorus/client` for relay/join.
+- **VS Code** (`packages/vscode`) — share/join via `@chorus/client`; sidebar transcript; session access control (approval, email gate, repo gate). Can host relay for terminal joiners or join a terminal host. Does **not** drive OpenCode’s model when sharing — publish host lines manually or pair with OpenCode.
+- **Shared client** (`packages/client`) — `JoinClient` + `RelayServer`; used by both adapters. UI is secondary; relay host/joiner interaction is the contract.
 
 ## Explicit non-goals (for now)
 
