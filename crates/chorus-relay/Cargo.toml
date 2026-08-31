@@ -5,7 +5,12 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 description = "Chorus collaborative session relay (WebSocket)"
-publish = false
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords = ["websocket", "opencode", "collaboration", "relay", "pair-programming"]
+categories = ["web-programming::http-server", "network-programming"]
+exclude = ["tests/"]
 
 [lib]
 name = "chorus_relay"
