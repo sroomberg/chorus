@@ -1,0 +1,28 @@
+{
+  "name": "@chorus/client",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test test/join.test.ts test/relay.test.ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@chorus/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
+  }
+}

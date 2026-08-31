@@ -1,9 +1,9 @@
 import { z } from "zod";
 /** Role granted to new share tokens when the host omits an explicit role. */
 export declare const chorusRoleSchema: z.ZodEnum<{
-    admin: "admin";
     edit: "edit";
     view: "view";
+    admin: "admin";
 }>;
 export declare const chorusSecurityConfigSchema: z.ZodObject<{
     requireApproval: z.ZodDefault<z.ZodBoolean>;
@@ -11,9 +11,9 @@ export declare const chorusSecurityConfigSchema: z.ZodObject<{
     requireRepoMatch: z.ZodDefault<z.ZodBoolean>;
     requireEmailDomainMatch: z.ZodDefault<z.ZodBoolean>;
     defaultRole: z.ZodDefault<z.ZodEnum<{
-        admin: "admin";
         edit: "edit";
         view: "view";
+        admin: "admin";
     }>>;
     allowedEmailDomain: z.ZodOptional<z.ZodString>;
     additionalRepoRemotePrefixes: z.ZodDefault<z.ZodArray<z.ZodString>>;
@@ -56,9 +56,9 @@ export declare const chorusConfigSchema: z.ZodObject<{
         requireRepoMatch: z.ZodDefault<z.ZodBoolean>;
         requireEmailDomainMatch: z.ZodDefault<z.ZodBoolean>;
         defaultRole: z.ZodDefault<z.ZodEnum<{
-            admin: "admin";
             edit: "edit";
             view: "view";
+            admin: "admin";
         }>>;
         allowedEmailDomain: z.ZodOptional<z.ZodString>;
         additionalRepoRemotePrefixes: z.ZodDefault<z.ZodArray<z.ZodString>>;

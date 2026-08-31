@@ -1,6 +1,6 @@
 {
   "name": "@chorus/plugin",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "OpenCode plugin for collaborative session sharing via chorus-relay.",
   "private": true,
   "license": "MIT",
@@ -32,13 +32,14 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run test/access.test.ts test/backup.test.ts test/config.test.ts test/join-command.test.ts test/pending-queue.test.ts test/transcript.test.ts && bun test test/relay.test.ts test/join.test.ts",
+    "test": "vitest run test/access.test.ts test/backup.test.ts test/config.test.ts test/join-command.test.ts test/pending-queue.test.ts test/transcript.test.ts",
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.726.0",
     "@aws-sdk/lib-storage": "^3.726.0",
+    "@chorus/client": "workspace:*",
     "@chorus/shared": "workspace:*",
     "zod": "4.1.8"
   },
