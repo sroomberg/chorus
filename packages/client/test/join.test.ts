@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, setDefaultTimeout } from "bun:test";
-import { JoinClient } from "../src/join/index.js";
-import { RelayServer } from "../src/relay/index.js";
+import { JoinClient, RelayServer } from "../src/index.js";
 
 setDefaultTimeout(15_000);
 
