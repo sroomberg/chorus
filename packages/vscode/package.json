@@ -20,6 +20,8 @@
     "onCommand:chorus.status",
     "onCommand:chorus.sendPrompt",
     "onCommand:chorus.publishHostMessage",
+    "onCommand:chorus.approve",
+    "onCommand:chorus.deny",
     "onView:chorus.session"
   ],
   "main": "./dist/extension.js",
@@ -69,6 +71,16 @@
         "command": "chorus.openSession",
         "title": "Chorus: Open Session Panel",
         "category": "Chorus"
+      },
+      {
+        "command": "chorus.approve",
+        "title": "Chorus: Approve Joiner",
+        "category": "Chorus"
+      },
+      {
+        "command": "chorus.deny",
+        "title": "Chorus: Deny Joiner",
+        "category": "Chorus"
       }
     ],
     "configuration": {
@@ -82,7 +94,22 @@
         "chorus.displayName": {
           "type": "string",
           "default": "",
-          "description": "Display name shown to collaborators (defaults to OS username)."
+          "description": "Display name shown to collaborators (required non-empty; defaults to OS username)."
+        },
+        "chorus.requireApproval": {
+          "type": "boolean",
+          "default": true,
+          "description": "When sharing, hold joiners in pending until Approve/Deny (matches OpenCode plugin default)."
+        },
+        "chorus.email": {
+          "type": "string",
+          "default": "",
+          "description": "Joiner email sent on auth when the host enabled an allowedEmailDomain gate."
+        },
+        "chorus.allowedEmailDomain": {
+          "type": "string",
+          "default": "",
+          "description": "When sharing, require joiners to authenticate with an email at this domain."
         },
         "chorus.relayBin": {
           "type": "string",
