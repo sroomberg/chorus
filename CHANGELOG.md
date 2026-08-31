@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## v2.1.0 — 2026-08-31
+
+VS Code adapter and shared client extraction on top of the v2.0.0 relay. The relay remains the core; OpenCode and VS Code are thin adapters on the same `/host` + `/ws` protocol.
+
+GitHub tag `v2.1.0` is the source of truth for this release. `@chorus/plugin` remains install-from-git (packages are private). Rebuild `chorus-relay` from this tag when upgrading from v2.0.0.
+
+### VS Code adapter
+
+- New extension (`packages/vscode`) — share/join/chat, Session sidebar, approve/deny joiners
+- Session access control matches OpenCode: required display name, host approval, optional email/repo gates
+- Cross-adapter relay: VS Code can host for terminal joiners or join a terminal host
+
+### Shared client
+
+- Extract `@chorus/client` (`JoinClient` + `RelayServer`) used by OpenCode plugin and VS Code
+- OpenCode plugin re-exports from `@chorus/client` (includes v2.0.0 network options: CIDR allowlists, async `stop()`)
+
+### Tests & docs
+
+- `bun run test:vscode-e2e` — email gate, pending approve, `collab.input`
+- `bun run test:vscode-relay-e2e` — three-env gate + VS Code ↔ terminal cross-adapter
+- README, STATUS, DECISIONS, and `packages/vscode/README.md` updated
+
 ## v2.0.0 — 2026-08-21
 
 Enterprise network lockdown for Chorus: keep the relay off the open internet with CIDR allowlists, private bind, and VPN/VPC deployment docs.

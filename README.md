@@ -11,16 +11,17 @@ Collaborative OpenCode session sharing. Pair-program a live AI session from anot
 
 ## How it works
 
-Chorus is an [OpenCode](https://github.com/sst/opencode) plugin plus a **Rust WebSocket relay** (`chorus-relay`).
+Chorus is an [OpenCode](https://github.com/sst/opencode) plugin, a **VS Code adapter**, and a **Rust WebSocket relay** (`chorus-relay`). The relay is the core: adapters are thin clients on the same `/host` + `/ws` wire protocol (`@chorus/shared`).
 
 ```
-Host runs opencode                 → plugin loads
-Host runs: /chorus-share           → plugin spawns chorus-relay + issues join token
-Joiner runs: /chorus-join          → connects to relay /ws
-Joiner prompts                     → relay → host control channel → host session.prompt
+Host adapter (OpenCode or VS Code)  → spawns chorus-relay + issues join token via /host
+Joiner adapter (OpenCode or VS Code) → connects to relay /ws
+Joiner prompts                       → relay → host control channel → host session (OpenCode) or host panel (VS Code)
 ```
 
-Both sides need OpenCode + the chorus plugin. The host machine needs the `chorus-relay` binary on `PATH` or built in-repo (`target/release/chorus-relay`). Override with `CHORUS_RELAY_BIN`.
+**OpenCode ↔ OpenCode** is the primary path (full LLM loop + transcript mirror). **VS Code** uses the same relay: it can host a session that terminal/OpenCode joiners connect to, or join a terminal/OpenCode host. VS Code does not drive OpenCode’s model when sharing — publish host/AI lines manually or pair with an OpenCode host. See [packages/vscode/README.md](packages/vscode/README.md).
+
+The host machine needs the `chorus-relay` binary on `PATH` or built in-repo (`target/release/chorus-relay`). Override with `CHORUS_RELAY_BIN`.
 
 ## Installation
 
@@ -43,6 +44,16 @@ Then add to OpenCode config:
 }
 ```
 
+### VS Code adapter
+
+```sh
+cargo build -p chorus-relay --release
+bun install
+bun run build:ts
+```
+
+In VS Code: **Extensions: Install from Location…** → `packages/vscode`, then **Chorus: Share Session** / **Join Session**. Details: [packages/vscode/README.md](packages/vscode/README.md).
+
 ## Layout
 
 One monorepo, two ecosystems, one wire contract:
@@ -50,6 +61,8 @@ One monorepo, two ecosystems, one wire contract:
 | Path | Artifact | Description |
 |---|---|---|
 | `packages/plugin` | npm `@chorus/plugin` | OpenCode plugin — tools, hooks, spawns/manages relay |
+| `packages/client` | npm `@chorus/client` | Shared `JoinClient` + `RelayServer` for host adapters |
+| `packages/vscode` | VS Code extension `chorus` | Share/join Chorus sessions from VS Code |
 | `packages/shared` | npm `@chorus/shared` | TypeScript types + codecs for joiner and host-control protocols |
 | `crates/chorus-relay` | `chorus-relay` binary | Rust WebSocket relay (`/ws` joiners, `/host` control plane) |
 | `protocol/` | fixtures (not published) | Canonical JSON examples both TS and Rust must deserialize |
@@ -104,6 +117,28 @@ For live mirrored context on joiners, open the **web UI** (not only `opencode at
 - Joiner: http://127.0.0.1:4101  
 
 `opencode attach` works for driving the session, but OpenCode’s attach TUI often does not live-render plugin-injected transcript lines.
+
+### Adapter & relay e2e (no GUI)
+
+Protocol-level tests for the shared `@chorus/client` stack (same code paths as the OpenCode plugin and VS Code extension):
+
+```sh
+bun run test:vscode-e2e          # VS Code adapter: email gate, pending approve, collab.input
+bun run test:vscode-relay-e2e    # cross-adapter: VS Code host ↔ terminal joiner (both directions)
+bun run test:adapters-e2e        # both of the above
+bun run test:security-e2e        # OpenCode host + protocol joiner (requires multi-agent up)
+bun run test:network-e2e         # CIDR / source-port allowlist on chorus-relay
+```
+
+**Three-environment relay test** (`test:vscode-relay-e2e`): models host vscode, joiner vscode, and a disallowed joiner. Run all scenarios locally (default), or split across machines with `CHORUS_E2E_ROLE`:
+
+| Env | Role | Command |
+|-----|------|---------|
+| env1 | host vscode | `CHORUS_E2E_ROLE=host-vscode bun scripts/vscode-relay-e2e.ts` |
+| env2 | joiner vscode | `CHORUS_E2E_ROLE=joiner-vscode bun scripts/vscode-relay-e2e.ts` |
+| env3 | disallowed joiner | `CHORUS_E2E_ROLE=disallowed-joiner bun scripts/vscode-relay-e2e.ts` |
+
+Coordination file: `CHORUS_E2E_STATE` (default `/tmp/chorus-vscode-relay-e2e.json`).
 
 ## Configuration
 
