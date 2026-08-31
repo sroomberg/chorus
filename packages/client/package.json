@@ -1,8 +1,18 @@
 {
   "name": "@chorus/client",
   "version": "2.1.0",
-  "private": true,
+  "description": "Chorus JoinClient and RelayServer for host adapters.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sroomberg/chorus.git",
+    "directory": "packages/client"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
+  "files": ["dist"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
