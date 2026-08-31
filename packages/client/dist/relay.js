@@ -13,6 +13,8 @@ function resolveRelayBin() {
         join(here, "../../../target/debug/chorus-relay"),
         join(here, "../../../../target/release/chorus-relay"),
         join(here, "../../../../target/debug/chorus-relay"),
+        join(here, "../../../../../target/release/chorus-relay"),
+        join(here, "../../../../../target/debug/chorus-relay"),
     ];
     for (const path of candidates) {
         if (existsSync(path))
@@ -53,7 +55,7 @@ export function relayOptionsFromEnv(defaultPort) {
 }
 /**
  * Manages the Rust `chorus-relay` subprocess and the host control WebSocket.
- * Joiner-facing protocol on `/ws` is unchanged; adapters talk to `/host`.
+ * Joiner-facing protocol on `/ws` is unchanged; host adapters talk to `/host`.
  */
 export class RelayServer {
     port;
@@ -64,15 +66,45 @@ export class RelayServer {
     clients = 0;
     host;
     external;
+    bind;
+    allowedCidrs;
+    deniedCidrs;
+    allowedPorts;
+    allowOpenBind;
+    allowLoopback;
     pendingToken = null;
     onInjectInput;
     onChatMessage;
     onTyping;
+    onUserPending;
+    onUserJoined;
+    onUserLeft;
     constructor(port, opts = {}) {
         this.port = port;
         this.host = opts.host ?? "127.0.0.1";
         this.external = Boolean(opts.external);
         this.hostToken = opts.hostToken ?? "";
+        this.bind = opts.bind ?? "0.0.0.0";
+        this.allowedCidrs = opts.allowedCidrs ? [...opts.allowedCidrs] : [];
+        this.deniedCidrs = opts.deniedCidrs ? [...opts.deniedCidrs] : [];
+        this.allowedPorts = opts.allowedPorts ? [...opts.allowedPorts] : [];
+        this.allowOpenBind = opts.allowOpenBind ?? true;
+        this.allowLoopback = opts.allowLoopback ?? true;
+    }
+    /** Apply network policy before start() (from project/org chorus.json). */
+    setNetworkOptions(opts) {
+        if (opts.bind !== undefined)
+            this.bind = opts.bind;
+        if (opts.allowedCidrs !== undefined)
+            this.allowedCidrs = [...opts.allowedCidrs];
+        if (opts.deniedCidrs !== undefined)
+            this.deniedCidrs = [...opts.deniedCidrs];
+        if (opts.allowedPorts !== undefined)
+            this.allowedPorts = [...opts.allowedPorts];
+        if (opts.allowOpenBind !== undefined)
+            this.allowOpenBind = opts.allowOpenBind;
+        if (opts.allowLoopback !== undefined)
+            this.allowLoopback = opts.allowLoopback;
     }
     setInputHandler(fn) {
         this.onInjectInput = fn;
@@ -82,6 +114,15 @@ export class RelayServer {
     }
     setTypingHandler(fn) {
         this.onTyping = fn;
+    }
+    setUserPendingHandler(fn) {
+        this.onUserPending = fn;
+    }
+    setUserJoinedHandler(fn) {
+        this.onUserJoined = fn;
+    }
+    setUserLeftHandler(fn) {
+        this.onUserLeft = fn;
     }
     async start() {
         if (this.running)
@@ -97,7 +138,28 @@ export class RelayServer {
         }
         this.hostToken = this.hostToken || randomBytes(32).toString("hex");
         const bin = resolveRelayBin();
-        this.child = spawn(bin, ["--port", String(this.port), "--bind", "0.0.0.0", "--host-token", this.hostToken], {
+        const args = [
+            "--port",
+            String(this.port),
+            "--bind",
+            this.bind,
+            "--host-token",
+            this.hostToken,
+            "--allow-open-bind",
+            this.allowOpenBind ? "true" : "false",
+            "--allow-loopback",
+            this.allowLoopback ? "true" : "false",
+        ];
+        for (const cidr of this.allowedCidrs) {
+            args.push("--allow-cidr", cidr);
+        }
+        for (const cidr of this.deniedCidrs) {
+            args.push("--deny-cidr", cidr);
+        }
+        for (const port of this.allowedPorts) {
+            args.push("--allow-port", String(port));
+        }
+        this.child = spawn(bin, args, {
             stdio: ["ignore", "ignore", "pipe"],
             env: { ...process.env },
         });
@@ -184,14 +246,19 @@ export class RelayServer {
             case "user.typing":
                 this.onTyping?.(msg.displayName);
                 break;
+            case "user.pending":
+                this.onUserPending?.(msg.user);
+                break;
             case "user.joined":
                 this.clients += 1;
+                this.onUserJoined?.(msg.user);
                 break;
             case "user.left":
                 this.clients = Math.max(0, this.clients - 1);
+                this.onUserLeft?.(msg.userId);
                 break;
             case "user.list":
-                this.clients = msg.users.length;
+                this.clients = msg.users.filter((u) => u.status === "active").length;
                 break;
             case "status":
                 this.clients = msg.clients;
@@ -223,13 +290,32 @@ export class RelayServer {
             }, 5000);
         });
     }
+    setSessionPolicy(opts) {
+        this.send({
+            type: "session.policy",
+            requireApproval: opts.requireApproval,
+            repoRemote: opts.repoRemote === null ? "" : opts.repoRemote,
+            allowedEmailDomain: opts.allowedEmailDomain === null ? "" : opts.allowedEmailDomain,
+            additionalRepoRemotePrefixes: opts.additionalRepoRemotePrefixes ?? undefined,
+            repoRemoteRewrites: opts.repoRemoteRewrites ?? undefined,
+        });
+    }
+    approveUser(userId) {
+        this.send({ type: "host.approve", userId });
+    }
+    denyUser(userId) {
+        this.send({ type: "host.deny", userId });
+    }
+    kickUser(userId) {
+        this.send({ type: "host.kick", userId });
+    }
     pushEvent(event) {
         this.send({ type: "session.event", event });
     }
     sendChat(displayName, content) {
         this.send({ type: "chat.send", content, displayName });
     }
-    stop() {
+    async stop() {
         if (!this.external) {
             this.send({ type: "host.close" });
         }
@@ -240,16 +326,50 @@ export class RelayServer {
             // ignore
         }
         this.ws = null;
-        if (this.child && !this.child.killed) {
-            this.child.kill("SIGTERM");
-            setTimeout(() => {
-                if (this.child && !this.child.killed)
-                    this.child.kill("SIGKILL");
-            }, 1000).unref?.();
-        }
+        const child = this.child;
         this.child = null;
         this.running = false;
         this.clients = 0;
+        if (child && child.exitCode === null && child.signalCode === null) {
+            await new Promise((resolve) => {
+                const finish = () => resolve();
+                child.once("exit", finish);
+                try {
+                    child.kill("SIGTERM");
+                }
+                catch {
+                    finish();
+                    return;
+                }
+                setTimeout(() => {
+                    if (child.exitCode === null && child.signalCode === null) {
+                        try {
+                            child.kill("SIGKILL");
+                        }
+                        catch {
+                            finish();
+                        }
+                    }
+                }, 1000).unref?.();
+            });
+        }
+        if (!this.external) {
+            await this.waitUntilStopped();
+        }
+    }
+    async waitUntilStopped(timeoutMs = 2000) {
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+            try {
+                const res = await fetch(this.statusUrl(), { signal: AbortSignal.timeout(250) });
+                if (!res.ok)
+                    return;
+            }
+            catch {
+                return;
+            }
+            await new Promise((r) => setTimeout(r, 20));
+        }
     }
     get isRunning() {
         return this.running;
@@ -262,6 +382,12 @@ export class RelayServer {
     }
     getHost() {
         return this.host;
+    }
+    getBind() {
+        return this.bind;
+    }
+    getAllowedCidrs() {
+        return [...this.allowedCidrs];
     }
     isExternal() {
         return this.external;

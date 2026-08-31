@@ -9,7 +9,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join as pathJoin, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { JoinClient } from "../packages/plugin/src/join/index.js";
+import { JoinClient } from "../packages/client/src/index.ts";
 import { detectRepoRemote } from "../packages/plugin/src/git.js";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");

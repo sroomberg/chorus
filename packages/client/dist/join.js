@@ -3,15 +3,21 @@ export class JoinClient {
     relayUrl;
     token;
     displayName;
+    repoRemote;
+    email;
     ws = null;
     state;
     onEvent;
     onChatMessage;
     onTyping;
-    constructor(relayUrl, token, displayName) {
+    onPending;
+    onApproved;
+    constructor(relayUrl, token, displayName, repoRemote, email) {
         this.relayUrl = relayUrl;
         this.token = token;
         this.displayName = displayName;
+        this.repoRemote = repoRemote;
+        this.email = email;
         this.state = {
             status: "connecting",
             sessionId: "",
@@ -23,8 +29,30 @@ export class JoinClient {
         return new Promise((resolve, reject) => {
             const ws = new WebSocket(this.relayUrl);
             this.ws = ws;
+            let settled = false;
+            const succeed = () => {
+                if (settled)
+                    return;
+                settled = true;
+                resolve();
+            };
+            const fail = (err) => {
+                if (settled)
+                    return;
+                settled = true;
+                reject(err);
+            };
             ws.onopen = () => {
-                ws.send(encodeMessage({ type: "auth", token: this.token, displayName: this.displayName }));
+                const auth = {
+                    type: "auth",
+                    token: this.token,
+                    displayName: this.displayName,
+                };
+                if (this.repoRemote)
+                    auth.repoRemote = this.repoRemote;
+                if (this.email)
+                    auth.email = this.email;
+                ws.send(encodeMessage(auth));
             };
             ws.onmessage = (ev) => {
                 let msg;
@@ -35,10 +63,23 @@ export class JoinClient {
                     return;
                 }
                 switch (msg.type) {
+                    case "auth.pending":
+                        this.state.status = "pending";
+                        this.state.userId = msg.userId;
+                        this.onPending?.(msg.userId);
+                        succeed();
+                        break;
+                    case "auth.denied":
+                        this.state.status = "error";
+                        this.state.error = msg.message;
+                        fail(new Error(msg.message));
+                        ws.close();
+                        break;
                     case "session.history":
                         this.state.recentEvents = msg.events.slice(-50);
                         this.state.status = "connected";
-                        resolve();
+                        this.onApproved?.();
+                        succeed();
                         break;
                     case "session.event":
                         this.state.recentEvents = [...this.state.recentEvents.slice(-49), msg.event];
@@ -66,22 +107,24 @@ export class JoinClient {
                         this.state.status = "disconnected";
                         ws.close();
                         break;
-                    case "error":
+                    case "error": {
+                        const wasAdmitted = this.state.status === "connected" || this.state.status === "pending";
                         this.state.status = "error";
                         this.state.error = msg.message;
-                        if (this.state.recentEvents.length === 0) {
-                            reject(new Error(msg.message));
+                        if (!wasAdmitted) {
+                            fail(new Error(msg.message));
                         }
                         break;
+                    }
                 }
             };
             ws.onerror = () => {
                 this.state.status = "error";
                 this.state.error = "Connection error";
-                reject(new Error("WebSocket connection error"));
+                fail(new Error("WebSocket connection error"));
             };
             ws.onclose = () => {
-                if (this.state.status === "connected") {
+                if (this.state.status === "connected" || this.state.status === "pending") {
                     this.state.status = "disconnected";
                 }
             };
@@ -105,6 +148,12 @@ export class JoinClient {
     }
     setEventHandler(fn) {
         this.onEvent = fn;
+    }
+    setPendingHandler(fn) {
+        this.onPending = fn;
+    }
+    setApprovedHandler(fn) {
+        this.onApproved = fn;
     }
     sendTyping() {
         if (!this.ws || this.state.status !== "connected")
