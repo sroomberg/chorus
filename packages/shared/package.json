@@ -1,8 +1,10 @@
 {
   "name": "@chorus/shared",
-  "version": "0.1.0",
+  "version": "2.1.0",
   "description": "Shared TypeScript types and protocol codecs for Chorus.",
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -20,6 +22,7 @@
     "websocket"
   ],
   "type": "module",
+  "files": ["dist"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

@@ -1,0 +1,73 @@
+name: Publish to npm
+
+on:
+  workflow_call:
+    inputs:
+      dry_run:
+        description: Validate packaging only; do not publish
+        type: boolean
+        default: false
+      expected_version:
+        description: Require manifest version to match (omit to skip check)
+        type: string
+        required: false
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Validate packaging only; do not publish
+        type: boolean
+        default: false
+      expected_version:
+        description: Require manifest version to match (omit to skip check)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish @chorus/* OpenCode packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Resolve expected version
+        id: version
+        run: |
+          if [ -n "${{ inputs.expected_version }}" ]; then
+            EXPECTED="${{ inputs.expected_version }}"
+            EXPECTED="${EXPECTED#v}"
+            echo "expected=${EXPECTED}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "expected=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish npm packages
+        run: |
+          chmod +x scripts/publish-npm.sh
+          if [ -n "${{ steps.version.outputs.expected }}" ]; then
+            export EXPECTED_VERSION="${{ steps.version.outputs.expected }}"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            export DRY_RUN=true
+          fi
+          ./scripts/publish-npm.sh
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
