@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Publish @chorus/shared, @chorus/client, and @chorus/plugin to npm in dependency order.
+# Publish @sroomberg/chorus-shared, @sroomberg/chorus-client, and @sroomberg/chorus-plugin to npm in dependency order.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-PACKAGES=("@chorus/shared" "@chorus/client" "@chorus/plugin")
+PACKAGES=("@sroomberg/chorus-shared" "@sroomberg/chorus-client" "@sroomberg/chorus-plugin")
 PACKAGE_DIRS=(shared client plugin)
 
 VERSION="$(node -p "require('./packages/plugin/package.json').version")"

@@ -1,9 +1,9 @@
-import type { SessionEvent, ConnectedUser } from "@chorus/shared";
+import type { SessionEvent, ConnectedUser } from "@sroomberg/chorus-shared";
 import {
   encodeMessage,
   decodeServerMessage,
   type ServerMessage,
-} from "@chorus/shared";
+} from "@sroomberg/chorus-shared";
 
 export type JoinStatus = "connecting" | "pending" | "connected" | "disconnected" | "error";
 

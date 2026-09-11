@@ -48,8 +48,8 @@ Recommended shape:
 ```
 
 - **v1:** OpenCode adapter = this repo’s plugin + local **Rust** `chorus-relay`
-- **v1.x:** keep `@chorus/shared` as the stable joiner + host-control contract; `@chorus/client` holds `JoinClient` / `RelayServer` for non-OpenCode hosts
-- **v1.x adapters in-monorepo:** VS Code (`packages/vscode`) — same wire protocol and `@chorus/client` relay stack; host-specific UI only. Cross-adapter (VS Code host ↔ terminal joiner) is validated by `bun run test:vscode-relay-e2e`.
+- **v1.x:** keep `@sroomberg/chorus-shared` as the stable joiner + host-control contract; `@sroomberg/chorus-client` holds `JoinClient` / `RelayServer` for non-OpenCode hosts
+- **v1.x adapters in-monorepo:** VS Code (`packages/vscode`) — same wire protocol and `@sroomberg/chorus-client` relay stack; host-specific UI only. Cross-adapter (VS Code host ↔ terminal joiner) is validated by `bun run test:vscode-relay-e2e`.
 - **v2:** optional further adapters (Codex app-server remains a strong candidate) once OpenCode UX is solid; split adapter packages into separate repos only when publish/CI ownership diverges
 
 **Do not** make Claude Code / Amp the primary host — large audiences, but proprietary control planes. Treat them as distribution adapters later, not the core.
@@ -83,7 +83,7 @@ Current: **MIT** (Copyright 2026 Steven Roomberg).
 
 **Open-core split (if/when cloud backup-as-a-service matters):**
 
-- MIT (or Apache-2.0): `@chorus/shared`, `@chorus/plugin`, self-host relay
+- MIT (or Apache-2.0): `@sroomberg/chorus-shared`, `@sroomberg/chorus-plugin`, self-host relay
 - Proprietary: managed multi-tenant relay, SSO, retention, audit
 
 No license change is required to continue v1. Prefer stability over a relicensing churn unless Apache’s patent grant becomes a concrete sales requirement.
@@ -98,7 +98,7 @@ No license change is required to continue v1. Prefer stability over a relicensin
 | Top-level dirs | `packages/*` (Bun) + `crates/*` (Cargo) + `protocol/` (fixtures). |
 | Task runner | Root `package.json` scripts only. No Turbo/Nx — two TS packages do not need a graph cache. |
 | Protocol SoT | `protocol/fixtures.json` is the shared contract; TS and Rust types stay hand-written until codegen is worth it. |
-| Ship units | npm: `@chorus/plugin` (+ `@chorus/shared`); binary: `chorus-relay` via releases / `cargo install`. Same repo, different artifacts. |
+| Ship units | npm: `@sroomberg/chorus-plugin` (+ `@sroomberg/chorus-shared`); binary: `chorus-relay` via releases / `cargo install`. Same repo, different artifacts. |
 
 ---
 

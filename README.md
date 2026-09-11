@@ -11,7 +11,7 @@ Collaborative OpenCode session sharing. Pair-program a live AI session from anot
 
 ## How it works
 
-Chorus is an [OpenCode](https://github.com/sst/opencode) plugin, a **VS Code adapter**, and a **Rust WebSocket relay** (`chorus-relay`). The relay is the core: adapters are thin clients on the same `/host` + `/ws` wire protocol (`@chorus/shared`).
+Chorus is an [OpenCode](https://github.com/sst/opencode) plugin, a **VS Code adapter**, and a **Rust WebSocket relay** (`chorus-relay`). The relay is the core: adapters are thin clients on the same `/host` + `/ws` wire protocol (`@sroomberg/chorus-shared`).
 
 ```
 Host adapter (OpenCode or VS Code)  → spawns chorus-relay + issues join token via /host
@@ -40,7 +40,7 @@ Then add to OpenCode config:
 
 ```json
 {
-  "plugin": ["@chorus/plugin"]
+  "plugin": ["@sroomberg/chorus-plugin"]
 }
 ```
 
@@ -60,10 +60,10 @@ One monorepo, two ecosystems, one wire contract:
 
 | Path | Artifact | Description |
 |---|---|---|
-| `packages/plugin` | npm `@chorus/plugin` | OpenCode plugin — tools, hooks, spawns/manages relay |
-| `packages/client` | npm `@chorus/client` | Shared `JoinClient` + `RelayServer` for host adapters |
+| `packages/plugin` | npm `@sroomberg/chorus-plugin` | OpenCode plugin — tools, hooks, spawns/manages relay |
+| `packages/client` | npm `@sroomberg/chorus-client` | Shared `JoinClient` + `RelayServer` for host adapters |
 | `packages/vscode` | VS Code extension `chorus` | Share/join Chorus sessions from VS Code |
-| `packages/shared` | npm `@chorus/shared` | TypeScript types + codecs for joiner and host-control protocols |
+| `packages/shared` | npm `@sroomberg/chorus-shared` | TypeScript types + codecs for joiner and host-control protocols |
 | `crates/chorus-relay` | `chorus-relay` binary | Rust WebSocket relay (`/ws` joiners, `/host` control plane) |
 | `protocol/` | fixtures (not published) | Canonical JSON examples both TS and Rust must deserialize |
 
@@ -120,7 +120,7 @@ For live mirrored context on joiners, open the **web UI** (not only `opencode at
 
 ### Adapter & relay e2e (no GUI)
 
-Protocol-level tests for the shared `@chorus/client` stack (same code paths as the OpenCode plugin and VS Code extension):
+Protocol-level tests for the shared `@sroomberg/chorus-client` stack (same code paths as the OpenCode plugin and VS Code extension):
 
 ```sh
 bun run test:vscode-e2e          # VS Code adapter: email gate, pending approve, collab.input

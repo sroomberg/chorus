@@ -1,7 +1,7 @@
 # Third-party license evaluation (commercial / paid app)
 
 Audit date: 2026-08-03  
-Scope: runtime dependencies of `@chorus/plugin`, `@chorus/shared`, and `chorus-relay` (excluding test-only / build-only tooling unless noted).  
+Scope: runtime dependencies of `@sroomberg/chorus-plugin`, `@sroomberg/chorus-shared`, and `chorus-relay` (excluding test-only / build-only tooling unless noted).  
 **Not legal advice** — use for planning; get counsel before shipping a paid product.
 
 ## Verdict
@@ -19,7 +19,7 @@ You can ship closed-source Chorus code (or a hosted relay) that links these libr
 |---|---|---|
 | Chorus repo (`LICENSE`) | MIT | You may dual-license *your* copyrighted code commercially. MIT grants already given to recipients of public MIT releases cannot be revoked. Common pattern: keep OSS MIT client/plugin; sell proprietary cloud/relay features under separate terms. |
 
-Package manifests currently mark `@chorus/*` as `"private": true` and omit a `license` field (tools report `UNLICENSED`). The repo root `LICENSE` is still MIT — align `package.json` / crate metadata when you publish.
+Package manifests currently mark `@sroomberg/chorus-*` as `"private": true` and omit a `license` field (tools report `UNLICENSED`). The repo root `LICENSE` is still MIT — align `package.json` / crate metadata when you publish.
 
 ---
 
@@ -40,7 +40,7 @@ Package manifests currently mark `@chorus/*` as `"private": true` and omit a `li
 
 No pure GPL/AGPL/SSPL crates found.
 
-### TypeScript (`@chorus/plugin` production tree)
+### TypeScript (`@sroomberg/chorus-plugin` production tree)
 
 Reachable runtime packages (~60), all permissive:
 

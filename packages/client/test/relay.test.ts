@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, setDefaultTimeout } from "bun:test";
 import { RelayServer } from "../src/index.js";
-import type { ServerMessage } from "@chorus/shared";
-import { encodeMessage, decodeServerMessage } from "@chorus/shared";
+import type { ServerMessage } from "@sroomberg/chorus-shared";
+import { encodeMessage, decodeServerMessage } from "@sroomberg/chorus-shared";
 
 setDefaultTimeout(15_000);
 

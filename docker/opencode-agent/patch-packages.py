@@ -8,5 +8,5 @@ for rel in ("package.json", "../shared/package.json"):
     data = json.loads(path.read_text())
     data.pop("private", None)
     if rel == "package.json":
-        data.setdefault("dependencies", {})["@chorus/shared"] = "file:../shared"
+        data.setdefault("dependencies", {})["@sroomberg/chorus-shared"] = "file:../shared"
     path.write_text(json.dumps(data, indent=2) + "\n")
