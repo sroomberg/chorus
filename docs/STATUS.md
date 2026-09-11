@@ -15,7 +15,7 @@ Chorus is a **relay-first** LAN collaboration stack with two adapters on one wir
 The browser companion (`packages/web`) was intentionally removed. Joiners mirror the host transcript into their OpenCode session (`[Host]:` / `[AI]:` lines via `noReply` inject); side-channel chat/typing remain toasts.
 The in-process Bun relay has been replaced by `crates/chorus-relay`.
 
-**Editor adapters:** VS Code shipped in-repo (`packages/vscode`); Zed adapter deferred to a separate branch/PR.
+**Editor adapters:** VS Code shipped in-repo (`packages/vscode`); Zed adapter on `zed-plugin` branch (`packages/zed` + `crates/chorus-zed-helper`, PR #5).
 
 Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`, `opencode-ensemble`, `opencode-relay`): those target **multi-agent / same-DB sync**. Chorus targets **multi-human** pair programming on one live AI session.
 
@@ -76,7 +76,8 @@ Enterprise gap analysis (what would actually pass a security review vs what ship
 
 - `bun run test:vscode-e2e` — VS Code path: email gate, pending approve, `collab.input`
 - `bun run test:vscode-relay-e2e` — three-env gate (host vscode / joiner vscode / disallowed joiner) + VS Code ↔ terminal cross-adapter
-- `bun run test:adapters-e2e` — both of the above
+- `bun run test:zed-e2e` — Zed helper path: pending approve, `collab.input`, chat
+- `bun run test:adapters-e2e` — VS Code + Zed adapter e2e (above)
 - `bun run test:security-e2e` — OpenCode host + protocol joiner (approval flow)
 - `bun run test:network-e2e` — CIDR / source-port allowlist on `chorus-relay`
 
@@ -88,7 +89,8 @@ Enterprise gap analysis (what would actually pass a security review vs what ship
 
 - **OpenCode** (`packages/plugin`) — primary host; full LLM loop + transcript mirror. Re-exports `@sroomberg/chorus-client` for relay/join.
 - **VS Code** (`packages/vscode`) — share/join via `@sroomberg/chorus-client`; sidebar transcript; session access control (approval, email gate, repo gate). Can host relay for terminal joiners or join a terminal host. Does **not** drive OpenCode’s model when sharing — publish host lines manually or pair with OpenCode.
-- **Shared client** (`packages/client`) — `JoinClient` + `RelayServer`; used by both adapters. UI is secondary; relay host/joiner interaction is the contract.
+- **Zed** (`packages/zed` + `crates/chorus-zed-helper`) — share/join via native helper + MCP; same session access control as VS Code. WASM extension is a thin launcher; WebSocket work lives in the Rust helper.
+- **Shared client** (`packages/client`) — `JoinClient` + `RelayServer`; used by OpenCode and VS Code adapters. Zed uses a parallel Rust client in `chorus-zed-helper` on the same wire protocol.
 
 ## Explicit non-goals (for now)
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Zed adapter (zed-plugin branch)
+
+- Zed extension (`packages/zed`) + `chorus-zed-helper` (MCP/CLI) — share/join/chat with session access control aligned to VS Code
+- `bun run test:zed-e2e` — helper integration against live relay (pending approve, `collab.input`, chat)
+
 ## v2.1.0 — 2026-08-31
 
 VS Code adapter and shared client extraction on top of the v2.0.0 relay. The relay remains the core; OpenCode and VS Code are thin adapters on the same `/host` + `/ws` protocol.
