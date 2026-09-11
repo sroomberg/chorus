@@ -12,8 +12,8 @@ import {
   type ChorusConfig,
   type LoadedChorusConfig,
 } from "./config/index.js";
-import type { SessionEvent, ShareInfo, UserRole } from "@chorus/shared";
-import { normalizeDisplayName, normalizeEmail } from "@chorus/shared";
+import type { SessionEvent, ShareInfo, UserRole } from "@sroomberg/chorus-shared";
+import { normalizeDisplayName, normalizeEmail } from "@sroomberg/chorus-shared";
 import {
   MIRROR_LINE,
   formatMirroredEvent,

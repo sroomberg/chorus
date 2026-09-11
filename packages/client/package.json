@@ -1,5 +1,5 @@
 {
-  "name": "@chorus/client",
+  "name": "@sroomberg/chorus-client",
   "version": "2.1.0",
   "description": "Chorus JoinClient and RelayServer for host adapters.",
   "license": "MIT",
@@ -28,7 +28,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@chorus/shared": "workspace:*"
+    "@sroomberg/chorus-shared": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",
