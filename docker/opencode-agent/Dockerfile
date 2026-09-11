@@ -38,7 +38,7 @@ COPY packages/plugin/dist /opt/chorus/packages/plugin/dist
 COPY packages/plugin/commands /opt/chorus/packages/plugin/commands
 COPY docker/opencode-agent/patch-packages.py /opt/chorus/packages/plugin/patch-packages.py
 
-# Point @chorus/shared at the sibling package and install plugin deps
+# Point @sroomberg/chorus-shared at the sibling package and install plugin deps
 WORKDIR /opt/chorus/packages/plugin
 ARG OPENCODE_VERSION
 RUN python3 patch-packages.py \

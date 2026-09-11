@@ -1,4 +1,4 @@
-import type { SessionToken, ConnectedUser, UserRole, UserStatus } from "@chorus/shared";
+import type { SessionToken, ConnectedUser, UserRole, UserStatus } from "@sroomberg/chorus-shared";
 import { randomBytes } from "node:crypto";
 
 export function generateToken(

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { SessionSnapshot } from "@chorus/shared";
+import type { SessionSnapshot } from "@sroomberg/chorus-shared";
 
 // Mock the AWS SDK to avoid real network calls
 vi.mock("@aws-sdk/client-s3", () => {

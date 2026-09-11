@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { type JoinState } from "@chorus/client";
-import type { ConnectedUser, UserRole } from "@chorus/shared";
+import { type JoinState } from "@sroomberg/chorus-client";
+import type { ConnectedUser, UserRole } from "@sroomberg/chorus-shared";
 export type ChorusMode = "idle" | "sharing" | "joined" | "pending";
 export type TranscriptLine = {
     id: string;

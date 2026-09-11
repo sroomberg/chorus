@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Cross-adapter relay e2e — exercises the same `@chorus/client` stack the VS Code
+ * Cross-adapter relay e2e — exercises the same `@sroomberg/chorus-client` stack the VS Code
  * extension and OpenCode terminal plugin share.
  *
  * Three cloud-environment roles (set CHORUS_E2E_ROLE):

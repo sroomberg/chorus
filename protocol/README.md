@@ -2,7 +2,7 @@
 
 Canonical JSON examples for the joiner (`/ws`) and host-control (`/host`) contracts.
 
-Hand-written TypeScript types live in `@chorus/shared`. Hand-written Rust types live in `crates/chorus-relay`. Both sides **must** deserialize every fixture in [`fixtures.json`](./fixtures.json) — that file is the shared artifact that prevents drift.
+Hand-written TypeScript types live in `@sroomberg/chorus-shared`. Hand-written Rust types live in `crates/chorus-relay`. Both sides **must** deserialize every fixture in [`fixtures.json`](./fixtures.json) — that file is the shared artifact that prevents drift.
 
 ## Surfaces
 

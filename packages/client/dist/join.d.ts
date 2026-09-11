@@ -1,4 +1,4 @@
-import type { SessionEvent, ConnectedUser } from "@chorus/shared";
+import type { SessionEvent, ConnectedUser } from "@sroomberg/chorus-shared";
 export type JoinStatus = "connecting" | "pending" | "connected" | "disconnected" | "error";
 export interface JoinState {
     status: JoinStatus;
