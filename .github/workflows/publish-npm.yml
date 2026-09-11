@@ -45,6 +45,11 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
+      - name: Upgrade npm for Trusted Publishing
+        run: |
+          npm install -g npm@^11.5.1
+          npm -v
+
       - name: Install dependencies
         run: bun install
 
@@ -68,6 +73,10 @@ jobs:
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             export DRY_RUN=true
           fi
+          # Trusted Publishing uses OIDC; only fall back to NPM_TOKEN when configured.
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            export NODE_AUTH_TOKEN="$NPM_TOKEN"
+          fi
           ./scripts/publish-npm.sh
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
