@@ -1,4 +1,4 @@
-import type { ConnectedUser, SessionEvent, SessionToken, UserRole } from "@chorus/shared";
+import type { ConnectedUser, SessionEvent, SessionToken, UserRole } from "@sroomberg/chorus-shared";
 export type RelayServerOptions = {
     /** Host running the relay (default 127.0.0.1). */
     host?: string;

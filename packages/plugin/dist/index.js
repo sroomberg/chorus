@@ -4,7 +4,7 @@ import { formatJoinCommand } from "./join-command.js";
 import { S3BackupAdapter } from "./backup/index.js";
 import { detectRepoRemote } from "./git.js";
 import { loadChorusConfig, resolveDefaultRole, resolveRequireApproval, resolveAllowedEmailDomain, } from "./config/index.js";
-import { normalizeDisplayName, normalizeEmail } from "@chorus/shared";
+import { normalizeDisplayName, normalizeEmail } from "@sroomberg/chorus-shared";
 import { MIRROR_LINE, formatMirroredEvent, isChorusControlText, shouldFanOutHostUserText, shouldForwardJoinerInput, shouldPublishAssistantText, userTextFromParts, } from "./transcript.js";
 import { PendingQueue, formatPendingQueue, formatPendingQueueToast, resolveQueueTarget, } from "./pending-queue.js";
 import { networkInterfaces } from "node:os";

@@ -5,9 +5,9 @@ import {
   RelayServer,
   relayOptionsFromEnv,
   type JoinState,
-} from "@chorus/client";
-import type { ConnectedUser, SessionEvent, UserRole } from "@chorus/shared";
-import { normalizeDisplayName } from "@chorus/shared";
+} from "@sroomberg/chorus-client";
+import type { ConnectedUser, SessionEvent, UserRole } from "@sroomberg/chorus-shared";
+import { normalizeDisplayName } from "@sroomberg/chorus-shared";
 import { formatSessionLine, newEventId } from "./format.js";
 import { detectRepoRemote } from "./git.js";
 

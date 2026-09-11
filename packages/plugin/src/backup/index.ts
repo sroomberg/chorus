@@ -1,4 +1,4 @@
-import type { SessionSnapshot, BackupMeta } from "@chorus/shared";
+import type { SessionSnapshot, BackupMeta } from "@sroomberg/chorus-shared";
 
 export interface BackupAdapter {
   save(snapshot: SessionSnapshot): Promise<string>;

@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
-import { encodeHostMessage, decodeRelayToHost, } from "@chorus/shared";
+import { encodeHostMessage, decodeRelayToHost, } from "@sroomberg/chorus-shared";
 function resolveRelayBin() {
     if (process.env["CHORUS_RELAY_BIN"])
         return process.env["CHORUS_RELAY_BIN"];

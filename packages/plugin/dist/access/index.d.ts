@@ -1,4 +1,4 @@
-import type { SessionToken, ConnectedUser, UserRole, UserStatus } from "@chorus/shared";
+import type { SessionToken, ConnectedUser, UserRole, UserStatus } from "@sroomberg/chorus-shared";
 export declare function generateToken(sessionId: string, role?: UserRole, ttlMs?: number): SessionToken;
 export declare class AccessManager {
     private tokens;

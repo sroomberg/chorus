@@ -6,7 +6,7 @@ import {
   shouldPublishAssistantText,
   userTextFromParts,
 } from "../src/transcript.js";
-import type { SessionEvent } from "@chorus/shared";
+import type { SessionEvent } from "@sroomberg/chorus-shared";
 
 function event(type: string, payload: unknown): SessionEvent {
   return {
