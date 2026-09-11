@@ -1,13 +1,13 @@
 # Chorus status — what still needs to happen
 
-Snapshot as of 2026-08-31 (`v2.1.0` — VS Code adapter + `@chorus/client`). Tests/typecheck/build are green.
+Snapshot as of 2026-08-31 (`v2.1.0` — VS Code adapter + `@sroomberg/chorus-client`). Tests/typecheck/build are green.
 
 ## Current state
 
 Chorus is a **relay-first** LAN collaboration stack with two adapters on one wire protocol:
 
 - **OpenCode** (terminal): `/chorus-share` → spawns Rust `chorus-relay` + issues token via `/host`; `/chorus-join` → `/ws`; full LLM loop + transcript mirror
-- **VS Code** (`packages/vscode`): same `JoinClient` + `RelayServer` via `@chorus/client`; can host relay for terminal joiners or join a terminal host
+- **VS Code** (`packages/vscode`): same `JoinClient` + `RelayServer` via `@sroomberg/chorus-client`; can host relay for terminal joiners or join a terminal host
 - Side channel: `/chorus-chat` + typing toasts (OpenCode); VS Code panel chat
 - Optional S3/R2 backup of user events
 - **v2.0.0 network lockdown**: CIDR allow/deny, bind policy, source-port allowlist ([docs/NETWORK.md](./NETWORK.md))
@@ -24,7 +24,7 @@ Differentiation vs nearby OpenCode plugins (`opencode-live`, `opencode-sessions`
 ### P0 — ship honesty & installability
 
 1. Align docs with OpenCode-only product (README drift fixed in this commit).
-2. Publish/install path: packages are `"private": true` with no npm publish workflow; documented `bun add @chorus/plugin` does not work for outsiders. Choose git/`file:` install or publish to npm.
+2. Publish/install path: packages are `"private": true` with no npm publish workflow; documented `bun add @sroomberg/chorus-plugin` does not work for outsiders. Choose git/`file:` install or publish to npm.
 3. Add `commands/chorus-chat.md` (tool exists; slash command missing).
 4. Fix share slash-command text (still says “print token + host”; tool now emits a ready `/chorus-join` command).
 
@@ -86,8 +86,8 @@ Enterprise gap analysis (what would actually pass a security review vs what ship
 
 ## Adapter surface (monorepo)
 
-- **OpenCode** (`packages/plugin`) — primary host; full LLM loop + transcript mirror. Re-exports `@chorus/client` for relay/join.
-- **VS Code** (`packages/vscode`) — share/join via `@chorus/client`; sidebar transcript; session access control (approval, email gate, repo gate). Can host relay for terminal joiners or join a terminal host. Does **not** drive OpenCode’s model when sharing — publish host lines manually or pair with OpenCode.
+- **OpenCode** (`packages/plugin`) — primary host; full LLM loop + transcript mirror. Re-exports `@sroomberg/chorus-client` for relay/join.
+- **VS Code** (`packages/vscode`) — share/join via `@sroomberg/chorus-client`; sidebar transcript; session access control (approval, email gate, repo gate). Can host relay for terminal joiners or join a terminal host. Does **not** drive OpenCode’s model when sharing — publish host lines manually or pair with OpenCode.
 - **Shared client** (`packages/client`) — `JoinClient` + `RelayServer`; used by both adapters. UI is secondary; relay host/joiner interaction is the contract.
 
 ## Explicit non-goals (for now)

@@ -1,7 +1,7 @@
 import { networkInterfaces } from "node:os";
 import * as vscode from "vscode";
-import { JoinClient, RelayServer, relayOptionsFromEnv, } from "@chorus/client";
-import { normalizeDisplayName } from "@chorus/shared";
+import { JoinClient, RelayServer, relayOptionsFromEnv, } from "@sroomberg/chorus-client";
+import { normalizeDisplayName } from "@sroomberg/chorus-shared";
 import { formatSessionLine, newEventId } from "./format.js";
 import { detectRepoRemote } from "./git.js";
 function getLanIp() {

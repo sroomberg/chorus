@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import type { ConnectedUser } from "@chorus/shared";
+import type { ConnectedUser } from "@sroomberg/chorus-shared";
 import {
   JOIN_QUEUE_HEADER,
   PendingQueue,

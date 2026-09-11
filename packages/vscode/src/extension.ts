@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { UserRole } from "@chorus/shared";
+import type { UserRole } from "@sroomberg/chorus-shared";
 import { ChorusController } from "./controller.js";
 import { SessionViewProvider } from "./sessionView.js";
 

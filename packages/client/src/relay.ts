@@ -3,13 +3,13 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
-import type { ConnectedUser, SessionEvent, SessionToken, UserRole } from "@chorus/shared";
+import type { ConnectedUser, SessionEvent, SessionToken, UserRole } from "@sroomberg/chorus-shared";
 import {
   encodeHostMessage,
   decodeRelayToHost,
   type HostToRelay,
   type RelayToHost,
-} from "@chorus/shared";
+} from "@sroomberg/chorus-shared";
 
 function resolveRelayBin(): string {
   if (process.env["CHORUS_RELAY_BIN"]) return process.env["CHORUS_RELAY_BIN"];

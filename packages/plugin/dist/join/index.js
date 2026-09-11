@@ -1,2 +1,2 @@
-export { JoinClient } from "@chorus/client";
+export { JoinClient } from "@sroomberg/chorus-client";
 //# sourceMappingURL=index.js.map

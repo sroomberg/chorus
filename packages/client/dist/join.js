@@ -1,4 +1,4 @@
-import { encodeMessage, decodeServerMessage, } from "@chorus/shared";
+import { encodeMessage, decodeServerMessage, } from "@sroomberg/chorus-shared";
 export class JoinClient {
     relayUrl;
     token;

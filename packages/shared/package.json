@@ -1,5 +1,5 @@
 {
-  "name": "@chorus/shared",
+  "name": "@sroomberg/chorus-shared",
   "version": "2.1.0",
   "description": "Shared TypeScript types and protocol codecs for Chorus.",
   "publishConfig": {

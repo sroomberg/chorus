@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   publish:
-    name: Publish @chorus/* OpenCode packages
+    name: Publish @sroomberg/chorus-* OpenCode packages
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -3,4 +3,4 @@ export {
   relayOptionsFromEnv,
   type RelayServerOptions,
   type RelayNetworkOptions,
-} from "@chorus/client";
+} from "@sroomberg/chorus-client";
