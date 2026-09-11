@@ -1,2 +1,2 @@
-export { JoinClient, type JoinState, type JoinStatus } from "@chorus/client";
+export { JoinClient, type JoinState, type JoinStatus } from "@sroomberg/chorus-client";
 //# sourceMappingURL=index.d.ts.map

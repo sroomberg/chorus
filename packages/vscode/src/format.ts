@@ -1,4 +1,4 @@
-import type { SessionEvent } from "@chorus/shared";
+import type { SessionEvent } from "@sroomberg/chorus-shared";
 
 const LABELED_LINE = /^\[[^\]]+\]:\s/;
 

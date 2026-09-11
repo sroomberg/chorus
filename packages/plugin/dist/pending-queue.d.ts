@@ -1,4 +1,4 @@
-import type { ConnectedUser } from "@chorus/shared";
+import type { ConnectedUser } from "@sroomberg/chorus-shared";
 /** Short host-facing slot for a pending joiner (`1`, `2`, …). */
 export interface QueueEntry {
     ref: string;

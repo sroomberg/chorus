@@ -2,7 +2,7 @@
 
 VS Code adapter for [Chorus](../../README.md) — share or join a live collaborative AI session over `chorus-relay`.
 
-The relay is the core; this extension is a thin client on the same `/host` + `/ws` protocol as the OpenCode terminal plugin (`@chorus/client` + `@chorus/shared`).
+The relay is the core; this extension is a thin client on the same `/host` + `/ws` protocol as the OpenCode terminal plugin (`@sroomberg/chorus-client` + `@sroomberg/chorus-shared`).
 
 ## What it does
 

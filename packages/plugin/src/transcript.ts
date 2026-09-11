@@ -1,4 +1,4 @@
-import type { SessionEvent } from "@chorus/shared";
+import type { SessionEvent } from "@sroomberg/chorus-shared";
 
 /** Injected host/AI transcript lines — never forward back over collab.input. */
 export const MIRROR_LINE = /^\[(AI|Host)\]:/;
