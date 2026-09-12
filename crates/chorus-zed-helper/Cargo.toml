@@ -1,0 +1,29 @@
+[package]
+name = "chorus-zed-helper"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Native Chorus join/host helper for the Zed extension (CLI + MCP)"
+publish = false
+
+[[bin]]
+name = "chorus-zed-helper"
+path = "src/main.rs"
+
+[dependencies]
+chorus-relay = { path = "../chorus-relay" }
+clap = { version = "4", features = ["derive", "env"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.26"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+
+[dev-dependencies]
+chorus-relay = { path = "../chorus-relay" }
+tokio-tungstenite = "0.26"
+futures-util = "0.3"

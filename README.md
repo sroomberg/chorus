@@ -54,6 +54,16 @@ bun run build:ts
 
 In VS Code: **Extensions: Install from Location…** → `packages/vscode`, then **Chorus: Share Session** / **Join Session**. Details: [packages/vscode/README.md](packages/vscode/README.md).
 
+### Zed adapter
+
+Zed extensions run as WASM and cannot hold long-lived WebSocket UIs. The Zed adapter is a thin WASM shell plus native `chorus-zed-helper` (CLI + MCP) on the same `/host` + `/ws` protocol:
+
+```sh
+cargo build -p chorus-zed-helper --release
+```
+
+In Zed: **zed: extensions** → **Install Dev Extension** → `packages/zed`. Details: [packages/zed/README.md](packages/zed/README.md).
+
 ## Layout
 
 One monorepo, two ecosystems, one wire contract:
@@ -63,21 +73,26 @@ One monorepo, two ecosystems, one wire contract:
 | `packages/plugin` | npm `@sroomberg/chorus-plugin` | OpenCode plugin — tools, hooks, spawns/manages relay |
 | `packages/client` | npm `@sroomberg/chorus-client` | Shared `JoinClient` + `RelayServer` for host adapters |
 | `packages/vscode` | VS Code extension `chorus` | Share/join Chorus sessions from VS Code |
+| `packages/zed` | Zed extension `chorus` | Share/join via WASM + MCP → `chorus-zed-helper` |
 | `packages/shared` | npm `@sroomberg/chorus-shared` | TypeScript types + codecs for joiner and host-control protocols |
 | `crates/chorus-relay` | `chorus-relay` binary | Rust WebSocket relay (`/ws` joiners, `/host` control plane) |
+| `crates/chorus-zed-helper` | `chorus-zed-helper` binary | Native join/host client (CLI + MCP) for Zed |
 | `protocol/` | fixtures (not published) | Canonical JSON examples both TS and Rust must deserialize |
 
-Root `package.json` scripts are the only task entry (`build`, `test`, `typecheck`). Bun workspaces own `packages/*`; Cargo owns `crates/*`.
+Root `package.json` scripts are the only task entry (`build`, `test`, `typecheck`). Bun workspaces own `packages/*`; Cargo owns `crates/*` (Zed’s `packages/zed` is built separately for `wasm32-wasip2`).
 
 ## Development
 
 ```sh
 bun install
-bun run build          # release relay + TS packages
-bun run test           # relay tests + TS/Bun tests (includes protocol fixtures)
+bun run build          # release relay + zed-helper + TS packages
+bun run test           # relay/helper tests + TS/Bun tests (includes protocol fixtures)
 bun run typecheck
 cargo test -p chorus-relay
+cargo test -p chorus-zed-helper
 ```
+
+Zed adapter (optional): see [packages/zed/README.md](packages/zed/README.md) for Install Dev Extension + `chorus-zed-helper` setup.
 
 ### Multi-agent local testing
 

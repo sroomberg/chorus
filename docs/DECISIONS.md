@@ -49,7 +49,7 @@ Recommended shape:
 
 - **v1:** OpenCode adapter = this repo’s plugin + local **Rust** `chorus-relay`
 - **v1.x:** keep `@sroomberg/chorus-shared` as the stable joiner + host-control contract; `@sroomberg/chorus-client` holds `JoinClient` / `RelayServer` for non-OpenCode hosts
-- **v1.x adapters in-monorepo:** VS Code (`packages/vscode`) — same wire protocol and `@sroomberg/chorus-client` relay stack; host-specific UI only. Cross-adapter (VS Code host ↔ terminal joiner) is validated by `bun run test:vscode-relay-e2e`.
+- **v1.x adapters in-monorepo:** VS Code (`packages/vscode`) — same wire protocol and `@sroomberg/chorus-client` relay stack; host-specific UI only. Cross-adapter (VS Code host ↔ terminal joiner) is validated by `bun run test:vscode-relay-e2e`. Zed (`packages/zed` + `crates/chorus-zed-helper`) uses a native Rust client on the same protocol (WASM cannot hold long-lived WebSockets).
 - **v2:** optional further adapters (Codex app-server remains a strong candidate) once OpenCode UX is solid; split adapter packages into separate repos only when publish/CI ownership diverges
 
 **Do not** make Claude Code / Amp the primary host — large audiences, but proprietary control planes. Treat them as distribution adapters later, not the core.
