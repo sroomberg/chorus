@@ -28,15 +28,7 @@ jobs:
             exit 1
           fi
           if gh release view "$VERSION" >/dev/null 2>&1; then
-<<<<<<< Updated upstream
-            echo "Release ${VERSION} already exists; updating notes and tag target"
-            gh release edit "$VERSION" \
-              --title "$VERSION" \
-              --notes-file /tmp/release-notes.md \
-              --target "${{ github.sha }}"
-=======
             echo "Release ${VERSION} already exists; skipping create"
->>>>>>> Stashed changes
           else
             gh release create "$VERSION" \
               --title "$VERSION" \
@@ -45,3 +37,15 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ github.token }}
+
+  publish-crates:
+    name: Publish chorus-relay
+    needs: ci
+    uses: ./.github/workflows/publish-crates.yml
+    secrets: inherit
+
+  publish-npm:
+    name: Publish OpenCode plugin
+    needs: ci
+    uses: ./.github/workflows/publish-npm.yml
+    secrets: inherit
