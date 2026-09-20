@@ -27,9 +27,18 @@ jobs:
             echo "No CHANGELOG section found for ${VERSION}" >&2
             exit 1
           fi
-          gh release create "$VERSION" \
-            --title "$VERSION" \
-            --notes-file /tmp/release-notes.md
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release ${VERSION} already exists; updating notes and tag target"
+            gh release edit "$VERSION" \
+              --title "$VERSION" \
+              --notes-file /tmp/release-notes.md \
+              --target "${{ github.sha }}"
+          else
+            gh release create "$VERSION" \
+              --title "$VERSION" \
+              --notes-file /tmp/release-notes.md \
+              --target "${{ github.sha }}"
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
 
