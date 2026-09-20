@@ -28,7 +28,15 @@ jobs:
             exit 1
           fi
           if gh release view "$VERSION" >/dev/null 2>&1; then
-            echo "Release ${VERSION} already exists; skipping create"
+            echo "Release ${VERSION} already exists; updating notes and tag target"
+            if gh release edit "$VERSION" \
+                --title "$VERSION" \
+                --notes-file /tmp/release-notes.md \
+                --target "${{ github.sha }}"; then
+              echo "Updated release ${VERSION}"
+            else
+              echo "Release edit not permitted for GITHUB_TOKEN; leaving existing release unchanged"
+            fi
           else
             gh release create "$VERSION" \
               --title "$VERSION" \
