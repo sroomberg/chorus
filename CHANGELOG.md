@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## v2.1.2 — 2026-09-20
+
+Republish after git history rewrite (commit author metadata). No functional changes from v2.1.0; npm `@sroomberg/chorus-*` and `chorus-relay` on crates.io need a new version because **2.1.0** and **2.1.1** are already published and cannot be overwritten.
+
+### Release checklist
+
+1. Merge this PR to `main`.
+2. Create and push tag **`v2.1.2`** on the merge commit (do not move existing `v2.1.0` / `v1.0.0` tags).
+3. The Release workflow runs CI, updates/skips the GitHub release, and publishes to crates.io/npm (skips any version already on the registry).
+
 ## v2.1.0 — 2026-08-31
 
 VS Code adapter and shared client extraction on top of the v2.0.0 relay. The relay remains the core; OpenCode and VS Code are thin adapters on the same `/host` + `/ws` protocol.
