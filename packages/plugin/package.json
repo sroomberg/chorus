@@ -1,6 +1,6 @@
 {
   "name": "@sroomberg/chorus-plugin",
-  "version": "2.1.0",
+  "version": "2.1.2",
   "description": "OpenCode plugin for collaborative session sharing via chorus-relay.",
   "license": "MIT",
   "publishConfig": {
